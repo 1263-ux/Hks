@@ -91,6 +91,8 @@ export class Building {
     if (!s) return;
     s.currentHp = Math.max(0, s.currentHp - amount);
     this.flashDamage();
+    // 屏幕震动
+    this.scene.cameras.main.shake(80, 0.004);
 
     if (s.currentHp <= 0 && this.onFailure) {
       this.onFailure();

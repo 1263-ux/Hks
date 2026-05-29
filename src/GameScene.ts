@@ -2,11 +2,11 @@ import Phaser from 'phaser';
 import {
   MAP_WIDTH, MAP_HEIGHT, GAME_WIDTH, GAME_HEIGHT, GAME_DURATION,
   PLAYER_CONFIG, BUILDING_CONFIG, MONSTER_TEMPLATES,
-  SPAWN_DISTANCE, INITIAL_SPAWN_INTERVAL, SPAWN_WEIGHTS,
+  SPAWN_DISTANCE, INITIAL_SPAWN_INTERVAL,
   EXP_ORB_CONFIG, PICKUP_RANGE,
   BASE_EXP_TO_LEVEL, EXP_PER_LEVEL, ALL_SKILL_IDS,
-  SKILL_CONFIGS,
-  MonsterType, SkillId,
+  SKILL_CONFIGS, WAVE_STAGES,
+  MonsterType, SkillId, WaveStage,
 } from './config';
 import { Player } from './Player';
 import { Building } from './Building';
@@ -116,11 +116,14 @@ export class GameScene extends Phaser.Scene {
 
     this.player.update(delta);
 
-    // 刷怪
-    this.spawnTimer += delta;
-    if (this.spawnTimer >= this.spawnInterval) {
-      this.spawnTimer -= this.spawnInterval;
-      this.spawnMonster();
+    // 刷怪（波次驱动）
+    const stage = this.getCurrentStage();
+    if (stage) {
+      this.spawnTimer += delta;
+      if (this.spawnTimer >= stage.spawnInterval) {
+        this.spawnTimer -= stage.spawnInterval;
+        this.spawnWave(stage);
+      }
     }
 
     // 怪物更新
@@ -175,9 +178,29 @@ export class GameScene extends Phaser.Scene {
     bg.setDepth(0);
   }
 
-  // ── 刷怪 ──
-  private spawnMonster(): void {
-    const type = this.weightedRandomType();
+  // ── 波次系统 ──
+  private getCurrentStage(): WaveStage | null {
+    const elapsed = GAME_DURATION - this.gameTime;
+    for (const stage of WAVE_STAGES) {
+      if (elapsed >= stage.timeStart && elapsed < stage.timeEnd) return stage;
+    }
+    return null;
+  }
+
+  private spawnWave(stage: WaveStage): void {
+    const totalW = stage.monsters.reduce((s, m) => s + m.weight, 0);
+    for (let i = 0; i < stage.countPerWave; i++) {
+      let r = Math.random() * totalW;
+      let type: MonsterType = stage.monsters[0].type;
+      for (const entry of stage.monsters) {
+        r -= entry.weight;
+        if (r <= 0) { type = entry.type; break; }
+      }
+      this.spawnSingleMonster(type);
+    }
+  }
+
+  private spawnSingleMonster(type: MonsterType): void {
     const template = MONSTER_TEMPLATES[type];
     const angle = Math.random() * Math.PI * 2;
     const sx = MAP_WIDTH / 2 + Math.cos(angle) * SPAWN_DISTANCE;
@@ -209,16 +232,6 @@ export class GameScene extends Phaser.Scene {
     };
 
     this.monsters.push(monster);
-  }
-
-  private weightedRandomType(): MonsterType {
-    const total = SPAWN_WEIGHTS.reduce((s, w) => s + w.weight, 0);
-    let r = Math.random() * total;
-    for (const e of SPAWN_WEIGHTS) {
-      r -= e.weight;
-      if (r <= 0) return e.type;
-    }
-    return 'termite';
   }
 
   // ── 经验球 ──

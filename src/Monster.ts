@@ -88,6 +88,16 @@ export class Monster {
   takeDamage(amount: number): boolean {
     if (this.isDead) return false;
     this.hp -= amount;
+    // 浮动伤害数字
+    if (amount > 0) {
+      const num = this.scene.add.text(this.x + (Math.random() - 0.5) * 16, this.y - 12, `${Math.round(amount)}`, {
+        fontSize: '13px', color: '#ffffff', fontFamily: 'monospace', stroke: '#000', strokeThickness: 2,
+      }).setOrigin(0.5).setDepth(50);
+      this.scene.tweens.add({
+        targets: num, y: this.y - 36, alpha: 0, duration: 600,
+        onComplete: () => num.destroy(),
+      });
+    }
     // 受击闪白
     this.sprite.setFillStyle(0xffffff);
     this.scene.time.delayedCall(60, () => {
@@ -110,6 +120,27 @@ export class Monster {
   private die(): void {
     this.isDead = true;
     this.onDeath?.(this);
+
+    // 死亡爆散粒子
+    const colors: Record<string, number> = {
+      termite: 0xDDDDDD, wind: 0xDDCC88, acid_rain: 0x44CC44,
+      fire: 0xFF6633, freeze_thaw: 0x6699FF,
+    };
+    const color = colors[this.type] ?? 0xDDDDDD;
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI * 2 * i) / 6 + Math.random() * 0.5;
+      const p = this.scene.add.circle(this.sprite.x, this.sprite.y, 3, color);
+      p.setDepth(7);
+      this.scene.tweens.add({
+        targets: p,
+        x: this.sprite.x + Math.cos(a) * (30 + Math.random() * 20),
+        y: this.sprite.y + Math.sin(a) * (30 + Math.random() * 20),
+        alpha: 0, scale: 0.2,
+        duration: 350,
+        onComplete: () => p.destroy(),
+      });
+    }
+
     this.sprite.destroy();
     this.hpBar.destroy();
   }

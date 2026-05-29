@@ -139,81 +139,163 @@ export class VFX {
   }
 
   // ═══════════════════════════════════
-  // 技能特效
+  // 技能特效（大幅增强版）
   // ═══════════════════════════════════
 
-  /** 木构加固：木梁冲击波 */
-  static skillWood(scene: Phaser.Scene, x: number, y: number, angle: number): void {
-    // 木屑拖尾
-    for (let i = 0; i < 5; i++) {
-      const bx = x - Math.cos(angle) * (20 + Math.random() * 30);
-      const by = y - Math.sin(angle) * (20 + Math.random() * 30);
-      const p = scene.add.circle(bx + (Math.random() - 0.5) * 10, by + (Math.random() - 0.5) * 10, 2, 0xc4884d, 1);
-      p.setDepth(20);
-      scene.tweens.add({
-        targets: p, alpha: 0, y: p.y - 10, duration: 300 + Math.random() * 200,
-        onComplete: () => p.destroy(),
-      });
+  /** 木构加固：木梁冲击波 — 粗梁+年轮纹理+碎木四溅 */
+  static skillWood(scene: Phaser.Scene, x: number, y: number, angle: number, lv: number): void {
+    // 发射点木屑爆发
+    const woodColors = [0xc4884d, 0xdaa060, 0x8b6914, 0xffdd88];
+    VFX.burst(scene, x, y, lv >= 3 ? 15 : 8, woodColors, 100, 3, 400);
+    // 发射闪光
+    const flash = scene.add.circle(x, y, 6, 0xffffff, 0.9);
+    flash.setDepth(21);
+    scene.tweens.add({
+      targets: flash, scale: 3, alpha: 0, duration: 200,
+      onComplete: () => flash.destroy(),
+    });
+    // Lv3 额外金色强化光
+    if (lv >= 3) {
+      VFX.shockwave(scene, x, y, 50, 0xffdd44, 350);
     }
   }
 
-  /** 石材修补：石粉碎屑 */
-  static skillStone(scene: Phaser.Scene, x: number, y: number, radius: number): void {
-    VFX.burst(scene, x, y, 12, [0x999999, 0xaaaaaa, 0x888888], 130, 2, 400);
-    VFX.shockwave(scene, x, y, radius, 0x999999, 350);
-  }
-
-  /** 防水封护：水纹多层 */
-  static skillWater(scene: Phaser.Scene, x: number, y: number, radius: number): void {
+  /** 石材修补：多层震波+碎石爆散+地面裂纹 */
+  static skillStone(scene: Phaser.Scene, x: number, y: number, radius: number, lv: number): void {
+    // 3层震波（灰→浅灰→白）
+    const ringColors = [0x666666, 0x999999, 0xcccccc];
     for (let r = 0; r < 3; r++) {
-      const ring = scene.add.circle(x, y, 5, 0x4488cc, 0);
-      ring.setStrokeStyle(2, 0x4488cc, 0.6 - r * 0.15);
+      const ring = scene.add.circle(x, y, 4, 0, 0);
+      ring.setStrokeStyle(3 - r * 0.8, ringColors[r], 1 - r * 0.25);
       ring.setDepth(35);
       scene.tweens.add({
         targets: ring,
-        radius: radius * (0.6 + r * 0.2),
+        radius: radius * (0.7 + r * 0.2),
         alpha: 0,
-        duration: 400 + r * 150,
-        delay: r * 60,
-        ease: 'Power2',
+        duration: 350 + r * 100,
+        delay: r * 50,
+        ease: 'Power3',
         onComplete: () => ring.destroy(),
       });
     }
-    // 水滴粒子
-    VFX.burst(scene, x, y, 8, [0x4488cc, 0x66aadd, 0xaaddff], 80, 2, 500);
+    // 碎石爆散
+    const count = lv >= 3 ? 20 : 12;
+    VFX.burst(scene, x, y, count, [0x888888, 0xaaaaaa, 0x999999, 0xcccccc, 0x777777], 180, 3, 500);
+    // Lv3 额外大石块
+    if (lv >= 3) {
+      for (let i = 0; i < 5; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const rock = scene.add.rectangle(x, y, 6, 6, 0x777777, 1);
+        rock.setDepth(36);
+        rock.setRotation(Math.random() * Math.PI);
+        scene.tweens.add({
+          targets: rock,
+          x: x + Math.cos(a) * 120,
+          y: y + Math.sin(a) * 120,
+          alpha: 0, rotation: rock.rotation + Math.PI * 2,
+          duration: 600,
+          ease: 'Power2',
+          onComplete: () => rock.destroy(),
+        });
+      }
+    }
   }
 
-  /** 防虫处理：药雾 */
-  static skillInsect(scene: Phaser.Scene, x: number, y: number, radius: number): void {
-    // 雾团粒子缓慢扩散
-    for (let i = 0; i < 15; i++) {
+  /** 防水封护：4层水纹+水珠飞溅+护罩穹顶弧线 */
+  static skillWater(scene: Phaser.Scene, x: number, y: number, radius: number, lv: number): void {
+    const layers = lv >= 3 ? 5 : 3;
+    for (let r = 0; r < layers; r++) {
+      const ring = scene.add.circle(x, y, 6, 0, 0);
+      ring.setStrokeStyle(3 - r * 0.4, 0x4488cc, 0.8 - r * 0.12);
+      ring.setDepth(35);
+      scene.tweens.add({
+        targets: ring,
+        radius: radius * (0.5 + r * 0.15),
+        alpha: 0,
+        duration: 450 + r * 120,
+        delay: r * 40,
+        ease: 'Sine.easeOut',
+        onComplete: () => ring.destroy(),
+      });
+    }
+    // 水珠喷溅
+    VFX.burst(scene, x, y, lv >= 3 ? 16 : 10, [0x4488cc, 0x66bbee, 0xaaddff, 0xddeeff], 100, 3, 600);
+    // 中心水柱闪光
+    const pillar = scene.add.rectangle(x, y, 8, 4, 0xddeeff, 0.6);
+    pillar.setDepth(36);
+    scene.tweens.add({
+      targets: pillar, scaleY: 4, scaleX: 0.3, alpha: 0, duration: 300,
+      onComplete: () => pillar.destroy(),
+    });
+  }
+
+  /** 防虫处理：浓密药雾+草药碎屑飘散 */
+  static skillInsect(scene: Phaser.Scene, x: number, y: number, radius: number, lv: number): void {
+    const count = lv >= 3 ? 25 : 15;
+    for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
-      const d = Math.random() * radius * 0.8;
-      const p = scene.add.circle(x + Math.cos(a) * d * 0.3, y + Math.sin(a) * d * 0.3, 4, 0x44cc44, 0.3);
+      const d = Math.random() * radius * 0.85;
+      const p = scene.add.circle(x + Math.cos(a) * d * 0.2, y + Math.sin(a) * d * 0.2, 5, 0x44cc44, 0.35);
       p.setDepth(18);
       scene.tweens.add({
         targets: p,
         x: x + Math.cos(a) * d,
         y: y + Math.sin(a) * d,
-        alpha: 0,
-        scale: 2,
-        duration: 1000 + Math.random() * 500,
+        alpha: 0, scale: 2.5,
+        duration: 1200 + Math.random() * 600,
         ease: 'Sine.easeOut',
         onComplete: () => p.destroy(),
       });
     }
+    // 草药碎屑
+    if (lv >= 2) {
+      for (let i = 0; i < 8; i++) {
+        const s = scene.add.rectangle(x + (Math.random() - 0.5) * 40, y - 20, 3, 3, 0x88cc44, 0.7);
+        s.setDepth(19);
+        scene.tweens.add({
+          targets: s, y: s.y + 30 + Math.random() * 20, x: s.x + (Math.random() - 0.5) * 30,
+          alpha: 0, rotation: Math.random() * 3, duration: 1500,
+          onComplete: () => s.destroy(),
+        });
+      }
+    }
   }
 
-  /** 彩绘修复：颜料溅射 */
-  static skillPaint(scene: Phaser.Scene, x: number, y: number): void {
+  /** 彩绘修复：彩虹拖尾+命中颜料大爆炸 */
+  static skillPaint(scene: Phaser.Scene, x: number, y: number, lv: number): void {
+    // 发射点彩色闪光
     const colors = [0xff4488, 0xff8800, 0xffee00, 0x44ff88, 0x4488ff, 0xcc44ff];
-    VFX.burst(scene, x, y, 8, colors, 100, 3, 500);
-    VFX.shockwave(scene, x, y, 30, 0xff66cc, 280);
+    VFX.burst(scene, x, y, lv >= 2 ? 10 : 6, colors, 120, 4, 500);
+    // 多层彩色冲击波
+    for (let r = 0; r < 3; r++) {
+      const ring = scene.add.circle(x, y, 4, 0, 0);
+      ring.setStrokeStyle(2, colors[r * 2], 0.8);
+      ring.setDepth(35);
+      scene.tweens.add({
+        targets: ring, radius: 50 + r * 15, alpha: 0, duration: 300 + r * 60,
+        ease: 'Power2', onComplete: () => ring.destroy(),
+      });
+    }
+    // Lv3 弹射标记
+    if (lv >= 3) {
+      const star = scene.add.star(x, y, 5, 6, 10, 0xffdd44, 1);
+      star.setDepth(37);
+      scene.tweens.add({
+        targets: star, scale: 2, alpha: 0, rotation: Math.PI, duration: 400,
+        onComplete: () => star.destroy(),
+      });
+    }
   }
 
   /** 普攻命中 */
   static boltHit(scene: Phaser.Scene, x: number, y: number): void {
-    VFX.burst(scene, x, y, 2, [0x88ccff, 0xffffff], 40, 1.5, 150);
+    VFX.burst(scene, x, y, 3, [0x88ccff, 0xffffff, 0xaaddff], 50, 2, 200);
+    const spark = scene.add.circle(x, y, 3, 0xffffff, 0.9);
+    spark.setDepth(40);
+    scene.tweens.add({
+      targets: spark, scale: 3, alpha: 0, duration: 150,
+      onComplete: () => spark.destroy(),
+    });
   }
 
   // ═══════════════════════════════════

@@ -128,7 +128,15 @@ export class SkillManager {
     this.updateZones(delta, monsters, building);
 
     // 清理过期对象
-    this.projectiles = this.projectiles.filter(p => p.elapsed < p.lifetime);
+    this.projectiles = this.projectiles.filter(p => {
+      if (p.elapsed >= p.lifetime) {
+        const g3 = (p.graphic as any)._glow; if (g3) g3.destroy();
+        const h3 = (p.graphic as any)._hl; if (h3) h3.destroy();
+        p.graphic.destroy();
+        return false;
+      }
+      return true;
+    });
     this.zones = this.zones.filter(z => z.remaining > 0);
   }
 
@@ -137,27 +145,27 @@ export class SkillManager {
     switch (skill.id) {
       case 'wood_reinforce':
         SoundManager.skillWood();
-        VFX.skillWood(this.scene, player.x, player.y, 0);
+        VFX.skillWood(this.scene, player.x, player.y, 0, skill.level);
         this.castWoodReinforce(skill, player, monsters);
         break;
       case 'stone_repair':
         SoundManager.skillStone();
-        VFX.skillStone(this.scene, player.x, player.y, skill.range);
+        VFX.skillStone(this.scene, player.x, player.y, skill.range, skill.level);
         this.castStoneRepair(skill, player, monsters);
         break;
       case 'waterproof':
         SoundManager.skillWater();
-        VFX.skillWater(this.scene, player.x, player.y, skill.range);
+        VFX.skillWater(this.scene, player.x, player.y, skill.range, skill.level);
         this.castWaterproof(skill, player, monsters);
         break;
       case 'insect_control':
         SoundManager.skillInsect();
-        VFX.skillInsect(this.scene, player.x, player.y, skill.range);
+        VFX.skillInsect(this.scene, player.x, player.y, skill.range, skill.level);
         this.castInsectControl(skill, player);
         break;
       case 'painting_restore':
         SoundManager.skillPaint();
-        VFX.skillPaint(this.scene, player.x, player.y);
+        VFX.skillPaint(this.scene, player.x, player.y, skill.level);
         this.castPaintingRestore(skill, player, monsters);
         break;
     }
@@ -182,9 +190,17 @@ export class SkillManager {
       ? Math.atan2(nearest.y - player.y, nearest.x - player.x)
       : -Math.PI / 2; // 无目标时默认向上
 
-    const rect = this.scene.add.rectangle(player.x, player.y, width, height, 0xC4884D, 0.8);
+    // 梁身（粗木梁 + 高光条纹）
+    const rect = this.scene.add.rectangle(player.x, player.y, width * 1.5, height, 0xC4884D, 0.9);
     rect.setDepth(15);
     rect.setRotation(angle);
+    // 梁身高光
+    const hl = this.scene.add.rectangle(player.x, player.y, width * 0.5, height * 0.6, 0xdaa060, 0.7);
+    hl.setDepth(16);
+    hl.setRotation(angle);
+
+    // 作为投射物追踪（同时推进两个矩形）
+    (rect as any)._hl = hl;
 
     this.projectiles.push({
       graphic: rect,
@@ -277,8 +293,13 @@ export class SkillManager {
     }
     if (!nearest) return;
 
-    const ball = this.scene.add.circle(player.x, player.y, 5, 0xFF66CC);
+    // 颜料弹本体（更大+光晕）
+    const ball = this.scene.add.circle(player.x, player.y, 7, 0xFF66CC, 1);
     ball.setDepth(15);
+    // 光晕
+    const glow = this.scene.add.circle(player.x, player.y, 12, 0xFF88DD, 0.3);
+    glow.setDepth(14);
+    (ball as any)._glow = glow;
 
     this.projectiles.push({
       graphic: ball,
@@ -328,6 +349,9 @@ export class SkillManager {
         );
         p.graphic.x += Math.cos(angle) * p.speed * dt;
         p.graphic.y += Math.sin(angle) * p.speed * dt;
+        // 同步光晕
+        const pg = (p.graphic as any)._glow as Phaser.GameObjects.Arc;
+        if (pg) { pg.x = p.graphic.x; pg.y = p.graphic.y; }
 
         // 命中检测
         const dist = Phaser.Math.Distance.Between(
@@ -370,6 +394,9 @@ export class SkillManager {
         // 方向投射物（木构加固）
         p.graphic.x += Math.cos(p.angle) * p.speed * dt;
         p.graphic.y += Math.sin(p.angle) * p.speed * dt;
+        // 同步高光
+        const phl = (p.graphic as any)._hl as Phaser.GameObjects.Rectangle;
+        if (phl) { phl.x = p.graphic.x; phl.y = p.graphic.y; }
 
         // 与怪物碰撞检测
         for (const m of monsters) {

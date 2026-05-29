@@ -99,3 +99,83 @@ export const INITIAL_SPAWN_INTERVAL = 2000; // ms
 export const BASE_EXP_TO_LEVEL = 10;
 export const EXP_PER_LEVEL = 5; // ExpToNext = BASE + Level * EXP_PER_LEVEL
 export const PICKUP_RANGE = 90; // 经验球自动吸附范围 (spec 1.5 * 60)
+
+// ---- 技能 ----
+export type SkillId =
+  | 'wood_reinforce'
+  | 'stone_repair'
+  | 'waterproof'
+  | 'insect_control'
+  | 'painting_restore';
+
+export interface SkillLevelConfig {
+  level: number;
+  name: string;
+  cooldown: number;         // 秒
+  damage: number;
+  range: number;            // 圆形半径 / 投射物宽度
+  repairType: StructureType[];
+  repairAmount: number;
+  widthMultiplier?: number;
+  bonusDamageVs?: MonsterType;
+  bonusDamageMultiplier?: number;
+  knockbackForce?: number;
+  projectileBounce?: boolean;
+  zoneDuration?: number;    // 药雾持续时间（秒）
+}
+
+export interface ActiveSkill {
+  id: SkillId;
+  name: string;
+  level: number;
+  maxLevel: number;
+  cooldown: number;
+  timer: number;
+  damage: number;
+  range: number;
+  repairType: StructureType[];
+  repairAmount: number;
+  widthMultiplier?: number;
+  bonusDamageVs?: MonsterType;
+  bonusDamageMultiplier?: number;
+  knockbackForce?: number;
+  projectileBounce?: boolean;
+  zoneDuration?: number;
+}
+
+export const SKILL_CONFIGS: Record<SkillId, SkillLevelConfig[]> = {
+  wood_reinforce: [
+    { level: 1, name: '木构加固', cooldown: 5, damage: 20, range: 80, repairType: [], repairAmount: 0 },
+    { level: 2, name: '梁柱补强', cooldown: 5, damage: 30, range: 80, repairType: ['wood'], repairAmount: 1 },
+    { level: 3, name: '榫卯强化', cooldown: 5, damage: 45, range: 120, repairType: ['wood'], repairAmount: 2, widthMultiplier: 1.5 },
+  ],
+  stone_repair: [
+    { level: 1, name: '石材修补', cooldown: 6, damage: 18, range: 150, repairType: [], repairAmount: 0 },
+    { level: 2, name: '石粉填补', cooldown: 6, damage: 28, range: 180, repairType: [], repairAmount: 0 },
+    { level: 3, name: '表层加固', cooldown: 6, damage: 40, range: 180, repairType: ['stone'], repairAmount: 2, knockbackForce: 200 },
+  ],
+  waterproof: [
+    { level: 1, name: '防水封护', cooldown: 7, damage: 15, range: 180, repairType: [], repairAmount: 0 },
+    { level: 2, name: '排水导流', cooldown: 7, damage: 22, range: 180, repairType: [], repairAmount: 0, bonusDamageVs: 'acid_rain', bonusDamageMultiplier: 2 },
+    { level: 3, name: '防渗保护层', cooldown: 7, damage: 22, range: 210, repairType: ['stone', 'tile'], repairAmount: 2, bonusDamageVs: 'acid_rain', bonusDamageMultiplier: 2 },
+  ],
+  insect_control: [
+    { level: 1, name: '防虫处理', cooldown: 6, damage: 8, range: 120, repairType: [], repairAmount: 0, zoneDuration: 3 },
+    { level: 2, name: '虫害清查', cooldown: 6, damage: 8, range: 120, repairType: [], repairAmount: 0, zoneDuration: 4, bonusDamageVs: 'termite', bonusDamageMultiplier: 2 },
+    { level: 3, name: '木构驱虫', cooldown: 6, damage: 8, range: 150, repairType: ['wood'], repairAmount: 1, zoneDuration: 4, bonusDamageVs: 'termite', bonusDamageMultiplier: 2 },
+  ],
+  painting_restore: [
+    { level: 1, name: '彩绘修复', cooldown: 4, damage: 20, range: 0, repairType: [], repairAmount: 0 },
+    { level: 2, name: '颜料补绘', cooldown: 4, damage: 30, range: 60, repairType: [], repairAmount: 0 },
+    { level: 3, name: '壁画护色', cooldown: 4, damage: 40, range: 0, repairType: ['painting'], repairAmount: 2, projectileBounce: true },
+  ],
+};
+
+// ---- 刷怪权重（Phase 2 简单权重，后续改为波次驱动） ----
+export const SPAWN_WEIGHTS: { type: MonsterType; weight: number }[] = [
+  { type: 'termite', weight: 40 },
+  { type: 'wind', weight: 20 },
+  { type: 'acid_rain', weight: 20 },
+  { type: 'fire', weight: 15 },
+  { type: 'freeze_thaw', weight: 5 },
+];

@@ -6,12 +6,17 @@ export class Player {
   sprite: Phaser.GameObjects.Arc;
   hp: number;
   maxHp: number;
-  moveSpeed: number; // px/s
+  private baseMoveSpeed: number; // px/s（原始速度）
 
   // 成长属性（Phase 5 接入）
   exp = 0;
   level = 1;
   expToNext = 15;
+
+  // 控制效果
+  private slowFactor = 1.0;
+  private knockbackVx = 0;
+  private knockbackVy = 0;
 
   private keys: {
     W: Phaser.Input.Keyboard.Key;
@@ -29,13 +34,11 @@ export class Player {
     this.scene = scene;
     this.hp = maxHp;
     this.maxHp = maxHp;
-    this.moveSpeed = moveSpeed * SPEED_FACTOR;
+    this.baseMoveSpeed = moveSpeed * SPEED_FACTOR;
 
-    // 玩家用圆形表示
     this.sprite = scene.add.circle(x, y, radius, color);
     this.sprite.setDepth(10);
 
-    // 注册 WASD
     const kb = scene.input.keyboard!;
     this.keys = {
       W: kb.addKey(Phaser.Input.Keyboard.KeyCodes.W),
@@ -45,7 +48,26 @@ export class Player {
     };
   }
 
+  /** 当前有效移动速度（含减速） */
+  get moveSpeed(): number {
+    return this.baseMoveSpeed * this.slowFactor;
+  }
+
+  /** 设置减速 */
+  setSlow(active: boolean, factor = 0.4): void {
+    this.slowFactor = active ? factor : 1.0;
+  }
+
+  /** 施加击退 */
+  applyKnockback(fromX: number, fromY: number, force: number): void {
+    const angle = Math.atan2(this.sprite.y - fromY, this.sprite.x - fromX);
+    this.knockbackVx += Math.cos(angle) * force;
+    this.knockbackVy += Math.sin(angle) * force;
+  }
+
   update(delta: number): void {
+    const dt = delta / 1000;
+
     // 1. 计算输入方向
     let vx = 0, vy = 0;
     if (this.keys.A.isDown) vx -= 1;
@@ -53,28 +75,29 @@ export class Player {
     if (this.keys.W.isDown) vy -= 1;
     if (this.keys.S.isDown) vy += 1;
 
-    // 2. 对角线归一化，避免斜向加速
+    // 2. 对角线归一化
     const len = Math.sqrt(vx * vx + vy * vy);
     if (len > 0) { vx /= len; vy /= len; }
 
-    // 3. delta 调整位置
-    const dt = delta / 1000;
-    let nx = this.sprite.x + vx * this.moveSpeed * dt;
-    let ny = this.sprite.y + vy * this.moveSpeed * dt;
+    // 3. 输入移动 + 击退速度
+    let nx = this.sprite.x + vx * this.moveSpeed * dt + this.knockbackVx * dt;
+    let ny = this.sprite.y + vy * this.moveSpeed * dt + this.knockbackVy * dt;
 
-    // 4. 世界边界 clamp
+    // 4. 击退衰减
+    this.knockbackVx *= Math.pow(0.05, dt);
+    this.knockbackVy *= Math.pow(0.05, dt);
+
+    // 5. 世界边界 clamp
     const r = this.sprite.radius;
     nx = Phaser.Math.Clamp(nx, r, MAP_WIDTH - r);
     ny = Phaser.Math.Clamp(ny, r, MAP_HEIGHT - r);
 
-    // 5. 应用位置
     this.sprite.x = nx;
     this.sprite.y = ny;
   }
 
   takeDamage(amount: number): void {
     this.hp = Math.max(0, this.hp - amount);
-    // 受击闪白反馈
     this.sprite.setFillStyle(0xffffff);
     this.scene.time.delayedCall(100, () => {
       if (this.sprite.active) this.sprite.setFillStyle(0x4488ff);

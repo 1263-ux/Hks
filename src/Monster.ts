@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
-import { MonsterTemplate, StructureType, SPEED_FACTOR } from './config';
+import { MonsterTemplate, MonsterType, StructureType, SPEED_FACTOR } from './config';
 
 export class Monster {
   scene: Phaser.Scene;
   sprite: Phaser.GameObjects.Arc;
   hpBar: Phaser.GameObjects.Graphics;
-  type: string;
+  type: MonsterType;
 
   hp: number;
   maxHp: number;
@@ -22,10 +22,12 @@ export class Monster {
 
   isDead = false;
 
-  /** 攻击时触发，由 GameScene 绑定 */
+  /** 攻击时触发 */
   onAttack: ((monster: Monster) => void) | null = null;
-  /** 死亡时触发，由 GameScene 绑定 */
+  /** 死亡时触发 */
   onDeath: ((monster: Monster) => void) | null = null;
+  /** 接触玩家时触发（用于控制效果） */
+  onPlayerContact: ((monster: Monster) => void) | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -47,7 +49,7 @@ export class Monster {
     this.targetY = targetY;
     this.attackRange = attackRange;
 
-    // 视觉：彩色圆圈
+    // 视觉：按类型区分颜色和大小
     this.sprite = scene.add.circle(x, y, template.radius, template.color);
     this.sprite.setDepth(5);
 
@@ -66,7 +68,6 @@ export class Monster {
     );
 
     if (dist > this.attackRange) {
-      // 向古建移动
       const angle = Math.atan2(
         this.targetY - this.sprite.y,
         this.targetX - this.sprite.x,
@@ -75,20 +76,29 @@ export class Monster {
       this.sprite.x += Math.cos(angle) * this.speed * dt;
       this.sprite.y += Math.sin(angle) * this.speed * dt;
     } else {
-      // 在攻击范围内，按间隔攻击
       if (time - this.lastAttackTime >= this.attackInterval) {
         this.lastAttackTime = time;
         this.onAttack?.(this);
       }
     }
 
-    // 刷新头顶血条位置
     this.drawHpBar();
   }
 
   takeDamage(amount: number): boolean {
     if (this.isDead) return false;
     this.hp -= amount;
+    // 受击闪白
+    this.sprite.setFillStyle(0xffffff);
+    this.scene.time.delayedCall(60, () => {
+      if (this.sprite.active && !this.isDead) {
+        const colors: Record<string, number> = {
+          termite: 0xDDDDDD, wind: 0xDDCC88, acid_rain: 0x44CC44,
+          fire: 0xFF6633, freeze_thaw: 0x6699FF,
+        };
+        this.sprite.setFillStyle(colors[this.type] ?? 0xDDDDDD);
+      }
+    });
     if (this.hp <= 0) {
       this.hp = 0;
       this.die();
@@ -113,11 +123,9 @@ export class Monster {
     const bx = this.sprite.x - barW / 2;
     const by = this.sprite.y - this.sprite.displayHeight / 2 - 6;
 
-    // 底色
     this.hpBar.fillStyle(0x333333, 0.8);
     this.hpBar.fillRect(bx, by, barW, barH);
 
-    // 填充色（绿→黄→红）
     const ratio = this.hp / this.maxHp;
     const fillColor = ratio > 0.6 ? 0x44ff44 : ratio > 0.3 ? 0xffff44 : 0xff4444;
     this.hpBar.fillStyle(fillColor, 1);

@@ -115,115 +115,348 @@ export function generateAllTextures(scene: Phaser.Scene): void {
   genBolt(scene);
   genRepairCrate(scene);
   genSkillTextures(scene);
+  genUIAllTextures(scene);
 }
 
 // ═══════════════════════════════════════════════
-// 背景：古风庭院 480×270 像素格（=960×540 物理px）
+// 背景：山西古建草地 960×540 像素格（=1920×1080 物理px）
+// 全地图单张，不重复平铺
 // ═══════════════════════════════════════════════
 
 function genBackground(scene: Phaser.Scene) {
-  const W = 480, H = 270;
+  const W = 960, H = 540;
   const { canvas, ctx } = makeCanvas(W * PX, H * PX);
 
-  // 草地基底 — 暖绿色
-  pxRect(ctx, 0, 0, W, H, PAL.leafGreen);
+  // ── 坐标哈希 ──
+  const hash = (x: number, y: number): number =>
+    ((x * 374761393 + y * 668265263) ^ 0x5bf03635) >>> 0;
 
-  // 草斑纹理（更密集，150+ 点）
-  const grassColors = [PAL.midGreen, PAL.darkGreen, '#4A7A3A', '#6A9A5A', PAL.lightGreen];
-  for (let i = 0; i < 150; i++) {
-    const rx = Math.floor(Math.random() * W);
-    const ry = Math.floor(Math.random() * H);
-    px(ctx, rx, ry, grassColors[i % grassColors.length]);
+  // ── 调色板 ──
+  const gBase  = ['#7A9A4A','#6A8E3E','#8AA656','#729642','#7E9E50'];
+  const gDark  = ['#5A7A32','#4E6E28','#567A2E','#62863A','#4A6A26'];
+  const gLight = ['#8EB05A','#9ABE64','#92B458','#86AA52','#96BA60'];
+  const gDry   = ['#B8A050','#C4AC5A','#B09844','#BCA848','#A8943C'];
+  const sLoess = ['#C4A870','#B89860','#CCB478','#C0A468','#B09058'];
+  const sGravel= ['#8A7E6E','#7E7262','#827668','#7A6E5E','#867A6A'];
+  const sDark  = ['#5A4A30','#4E3E26','#52422C','#564630','#4C3C24'];
+  const sPath  = ['#B89868','#C4A474','#B49060','#C0A070','#AC8C58'];
+
+  // ── 1. 基底纵向渐变（上淡灰绿 → 下暖橄榄绿） ──
+  for (let gy = 0; gy < H; gy++) {
+    const t = gy / H;
+    let c: string;
+    if (t < 0.25)       c = gy % 3 === 0 ? '#8A9E6A' : '#829862';
+    else if (t < 0.55)  c = gBase[gy % gBase.length];
+    else if (t < 0.8)   c = gy % 2 === 0 ? '#6E8E42' : gDark[gy % gDark.length];
+    else                c = '#5E7E38';
+    pxHLine(ctx, 0, gy, W, c);
   }
 
-  // 土路（十字）— 暖棕色
-  pxRect(ctx, 0, H / 2 - 4, W, 8, PAL.lightBrown);
-  pxRect(ctx, W / 2 - 4, 0, 8, H, PAL.lightBrown);
-  // 路面纹理
-  const roadTex = [PAL.creamGold, PAL.warmBrown, '#C9A47A'];
-  for (let i = 0; i < 100; i++) {
-    px(ctx, Math.floor(Math.random() * W), H / 2 - 3 + Math.floor(Math.random() * 6), roadTex[i % 3]);
-    px(ctx, W / 2 - 3 + Math.floor(Math.random() * 6), Math.floor(Math.random() * H), roadTex[i % 3]);
-  }
-
-  // 中央石板庭院 — 扩大
-  const plazaCX = W / 2, plazaCY = H / 2;
-  pxRect(ctx, plazaCX - 28, plazaCY - 28, 56, 56, PAL.lightGray);
-  for (let gx = 0; gx < 6; gx++) {
-    for (let gy = 0; gy < 6; gy++) {
-      const sx = plazaCX - 26 + gx * 9;
-      const sy = plazaCY - 26 + gy * 9;
-      pxRect(ctx, sx, sy, 8, 8, '#B8A890');
-      pxRect(ctx, sx + 1, sy + 1, 6, 6, '#C8B898');
+  // ── 2. 草簇纹理（坐标哈希，无重复感） ──
+  for (let gy = 0; gy < H; gy++) {
+    for (let gx = 0; gx < W; gx++) {
+      const r = hash(gx, gy) % 100;
+      if (r < 7)        px(ctx, gx, gy, gLight[hash(gx, gy + 1) % 5]);
+      else if (r < 11)  px(ctx, gx, gy, gDark[hash(gx + 1, gy) % 5]);
+      else if (r < 13)  px(ctx, gx, gy, gDry[hash(gx, gy + 2) % 5]);
     }
   }
 
-  // 四角松柏 — 更大更精细
-  function tree(tx: number, ty: number) {
-    // 树干（三层色）
-    pxRect(ctx, tx - 2, ty + 14, 4, 14, PAL.deepBrown);
-    pxVLine(ctx, tx, ty + 12, 16, PAL.midBrown);       // 高光
-    // 树冠（四层三角，从暗到亮）
-    pxRect(ctx, tx - 10, ty - 2, 20, 6, PAL.darkGreen);  // L1 暗底
-    pxRect(ctx, tx - 8, ty + 0, 16, 5, PAL.midGreen);    // L1 亮面
-    pxRect(ctx, tx - 13, ty + 4, 26, 6, PAL.darkGreen);  // L2 暗底
-    pxRect(ctx, tx - 11, ty + 6, 22, 5, PAL.midGreen);   // L2 亮面
-    pxRect(ctx, tx - 16, ty + 10, 32, 5, PAL.darkGreen); // L3 暗底
-    pxRect(ctx, tx - 14, ty + 12, 28, 4, PAL.midGreen);  // L3 亮面
-    // 高光点
-    px(ctx, tx - 3, ty - 1, PAL.lightGreen);
-    px(ctx, tx + 1, ty + 5, PAL.lightGreen);
-    px(ctx, tx - 5, ty + 11, PAL.lightGreen);
-    px(ctx, tx + 2, ty + 13, PAL.lightGreen);
-  }
-  tree(26, 38);
-  tree(W - 28, 38);
-  tree(26, H - 52);
-  tree(W - 28, H - 52);
-
-  // 围墙 — 更完整的院墙
-  for (let wx = 8; wx < W - 8; wx++) {
-    px(ctx, wx, 8, PAL.midGray);     // 上墙
-    px(ctx, wx, H - 9, PAL.midGray); // 下墙
-  }
-  for (let wy = 8; wy < H - 8; wy++) {
-    px(ctx, 8, wy, PAL.midGray);     // 左墙
-    px(ctx, W - 9, wy, PAL.midGray); // 右墙
-  }
-  // 墙垛（更密）
-  for (let wx = 8; wx < W - 8; wx += 20) {
-    pxRect(ctx, wx, 6, 5, 2, '#A08070');
-    pxRect(ctx, wx, H - 7, 5, 2, '#A08070');
+  // ── 3. 黄土裸斑（不规则稀疏区域） ──
+  for (let i = 0; i < 180; i++) {
+    const cx = hash(i, 1) % W;
+    const cy = hash(2, i) % H;
+    const r = 2 + (hash(i, i) % 3);
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const qx = cx + dx, qy = cy + dy;
+        if (qx < 0 || qx >= W || qy < 0 || qy >= H) continue;
+        if (Math.abs(dx) + Math.abs(dy) > r + 2) continue;
+        if (hash(qx, qy) % 4 === 0) continue;
+        px(ctx, qx, qy, sLoess[hash(qx + cx, qy) % 5]);
+      }
+    }
   }
 
-  // 四角灯笼柱
-  function lanternPole(lx: number, ly: number) {
-    pxRect(ctx, lx, ly, 2, 18, PAL.deepBrown);          // 柱
-    pxRect(ctx, lx - 2, ly - 4, 6, 5, PAL.warmRed);     // 灯笼
-    pxRect(ctx, lx - 1, ly - 3, 4, 3, PAL.brightOrange);// 灯笼亮面
-    px(ctx, lx + 1, ly - 1, PAL.gold);                   // 烛光
+  // ── 4. 碎石散布 ──
+  for (let i = 0; i < 250; i++) {
+    const sx = hash(i, 100) % W;
+    const sy = hash(200, i) % H;
+    if (hash(sx, sy) % 9 > 0) continue;
+    px(ctx, sx, sy, sGravel[hash(sx + 1, sy) % 5]);
+    if (hash(sx, sy) % 13 === 0 && sx + 1 < W) {
+      px(ctx, sx + 1, sy, sGravel[hash(sx, sy + 1) % 5]);
+    }
   }
-  lanternPole(15, 10);
-  lanternPole(W - 18, 10);
-  lanternPole(15, H - 28);
-  lanternPole(W - 18, H - 28);
 
-  // 香炉（左下，更精细）
-  const lx = 50, ly = H - 44;
-  pxRect(ctx, lx - 5, ly, 10, 10, PAL.midBrown);      // 炉身
-  pxRect(ctx, lx - 4, ly - 1, 8, 2, PAL.warmBrown);   // 炉身亮面
-  pxRect(ctx, lx - 6, ly - 2, 12, 3, PAL.midGray);     // 炉口
-  pxRect(ctx, lx - 7, ly - 4, 14, 2, PAL.lightGray);   // 炉檐
-  // 三足
-  pxRect(ctx, lx - 4, ly + 9, 3, 3, PAL.darkGray);
-  pxRect(ctx, lx + 1, ly + 9, 3, 3, PAL.darkGray);
-  // 炊烟（3 缕弯曲上升）
-  for (let s = 0; s < 3; s++) {
-    const ox = lx - 2 + s * 3;
-    for (let j = 0; j < 6; j++) {
-      const sx = ox + (j % 2 === 0 ? 0 : 1);
-      const sy = ly - 8 - j * 3;
-      px(ctx, sx, sy, j < 2 ? '#CCCCCC' : '#DDDDDD');
+  // ── 5. 踩踏土径（中央十字 + 对角依稀小路） ──
+  const cx = W / 2, cy = H / 2;
+  const pathDefs = [
+    [cx, cy, cx, H, 10], [cx, cy, cx, 0, 8],
+    [cx, cy, 0, cy, 8], [cx, cy, W, cy, 9],
+    [cx - 60, cy, 0, H, 5], [cx + 60, cy, W, H, 5],
+  ];
+  for (const [sx, sy, ex, ey, pw] of pathDefs) {
+    const len = Math.sqrt((ex - sx) ** 2 + (ey - sy) ** 2);
+    for (let s = 0; s < len; s++) {
+      const t = s / len;
+      const px2 = Math.floor(sx + (ex - sx) * t);
+      const py = Math.floor(sy + (ey - sy) * t);
+      for (let dw = -pw / 2; dw < pw / 2; dw++) {
+        const qx = px2 + Math.floor(dw);
+        const qy = py + Math.floor((Math.random() - 0.5) * 2);
+        if (qx < 0 || qx >= W || qy < 0 || qy >= H) continue;
+        if (hash(qx, qy) % 6 < 3) {
+          px(ctx, qx, qy, sPath[hash(qx + s, qy) % 5]);
+        }
+      }
+    }
+  }
+
+  // ── 6. 枯草丝缕（横向干草条） ──
+  for (let i = 0; i < 400; i++) {
+    const gx = hash(i, 300) % W;
+    const gy = hash(400, i) % H;
+    if (hash(gx, gy) % 10 > 0) continue;
+    const l = 2 + (hash(gx + 1, gy) % 2);
+    for (let j = 0; j < l && gx + j < W; j++) {
+      px(ctx, gx + j, gy, gDry[hash(gx + j, gy) % 5]);
+    }
+  }
+
+  // ── 7. 古建环境元素 ──
+  // 调色板（复用 PAL + 本地补充）
+  const wTile   = '#6E6058'; // 灰瓦
+  const wTileL  = '#7E7068'; // 灰瓦亮
+  const wWood   = '#5A3828'; // 深棕木
+  const wWoodL  = '#7A4A32'; // 暖棕木
+  const wWall   = '#D4C098'; // 土黄墙
+  const wWallD  = '#C0AC80'; // 土黄墙暗
+  const wPillar = '#8B4A2A'; // 红棕柱
+  const wStone  = '#9A8E7E'; // 石质灰
+  const wStoneD = '#7A6E62'; // 石质暗
+  const wGold   = '#B89840'; // 暗金
+
+  // 地面阴影（椭圆暗区）
+  function shadow(sx: number, sy: number, rw: number, rh: number): void {
+    for (let dy = -rh; dy <= rh; dy++) {
+      const w3 = Math.floor(rw * Math.sqrt(Math.max(0, 1 - (dy / rh) ** 2)));
+      for (let dx = -w3; dx <= w3; dx++) {
+        const qx = sx + dx, qy = sy + dy;
+        if (qx < 0 || qx >= W || qy < 0 || qy >= H) continue;
+        if (hash(qx, qy) % 3 > 0) continue; // 半透明效果
+        px(ctx, qx, qy, sDark[(qx + qy) % 5]);
+      }
+    }
+  }
+
+  // 矮围墙：灰砖 + 墙垛 + 局部破损
+  function drawLowWall(x: number, y: number, len: number, h: number): void {
+    // 墙身
+    for (let wy = 0; wy < h - 2; wy++) {
+      pxHLine(ctx, x, y + wy, len, wy % 3 === 0 ? wStone : wStoneD);
+    }
+    pxHLine(ctx, x, y + h - 2, len, wTile);       // 墙顶瓦
+    pxHLine(ctx, x, y + h - 1, len, wTileL);       // 墙顶高光
+    // 墙垛
+    for (let dx = 2; dx < len - 2; dx += 10) {
+      pxRect(ctx, x + dx, y - 2, 3, 3, wStone);
+      px(ctx, x + dx + 1, y - 2, wStoneD);
+    }
+    // 随机破损缺口
+    for (let dx = 0; dx < len; dx++) {
+      if (hash(x + dx, y) % 25 === 0) {
+        for (let dy2 = -1; dy2 <= 1; dy2++) {
+          if (y + h - 3 + dy2 >= y && y + h - 3 + dy2 < y + h) {
+            px(ctx, x + dx, y + h - 3 + dy2, sDark[(x + dx) % 5]);
+          }
+        }
+      }
+    }
+  }
+
+  // 小牌坊：双柱 + 横梁 + 小屋顶
+  function drawSmallGate(gx: number, gy: number, s: number): void {
+    const w = Math.floor(12 * s), h = Math.floor(20 * s);
+    const lx = gx - Math.floor(w / 2), rx = gx + Math.floor(w / 2);
+    const top = gy - h;
+    // 柱
+    pxRect(ctx, lx, top + 6, 2, h - 6, s > 1 ? wPillar : wWood);
+    pxRect(ctx, rx - 2, top + 6, 2, h - 6, s > 1 ? wWood : wWoodL);
+    px(ctx, lx, top + 6, wWoodL);  // 左柱高光
+    // 横梁
+    pxRect(ctx, lx - 1, top + 2, w + 2, 4, wWood);
+    pxHLine(ctx, lx - 1, top + 2, w + 2, wWoodL);
+    // 小屋顶
+    pxRect(ctx, lx - 3, top - 2, w + 6, 4, wTile);
+    pxRect(ctx, lx - 2, top - 1, w + 4, 1, wTileL);
+    px(ctx, lx - 3, top - 2, wTileL); px(ctx, rx + 2, top - 2, wTileL);
+  }
+
+  // 小偏殿：墙体 + 木柱 + 灰瓦屋顶 + 微翘飞檐
+  function drawSideHall(hx: number, hy: number, w: number, h: number, s: number): void {
+    const lx = hx - Math.floor(w / 2);
+    const top = hy - h;
+    // 屋顶
+    pxRect(ctx, lx - 3, top - 4, w + 6, 5, wTile);
+    pxRect(ctx, lx - 2, top - 5, w + 4, 4, wTileL);
+    pxHLine(ctx, lx - 3, top - 1, w + 6, '#4A3A30'); // 檐下阴影
+    // 飞檐翘角
+    px(ctx, lx - 4, top - 6, wTileL);
+    px(ctx, lx + w + 3, top - 6, wTile);
+    // 斗拱层
+    for (let dx = lx; dx < lx + w; dx += 3) {
+      pxRect(ctx, dx, top, 2, 2, wWood);
+    }
+    // 墙体
+    for (let wy = 0; wy < h - 12; wy++) {
+      pxHLine(ctx, lx + 1, top + 4 + wy, w - 2, wy % 5 === 0 ? wWallD : wWall);
+    }
+    // 木柱（两侧各一）
+    pxRect(ctx, lx, top, 2, h - 6, s > 1 ? wPillar : wWood);
+    pxRect(ctx, lx + w - 2, top, 2, h - 6, s > 1 ? wWood : wWoodL);
+    px(ctx, lx, top + 2, wWoodL); // 柱高光
+    // 门洞
+    const doorX = hx - Math.floor(w / 6), doorW = Math.floor(w / 3);
+    pxRect(ctx, doorX, top + h - 14, doorW, 10, '#2A1A10');
+    pxRect(ctx, doorX + 1, top + h - 13, doorW - 2, 8, '#1A0E08');
+  }
+
+  // 石灯：底座 + 灯柱 + 灯龛
+  function drawStoneLantern(lx: number, ly: number): void {
+    // 底座
+    pxRect(ctx, lx - 3, ly - 2, 7, 3, wStoneD);
+    pxRect(ctx, lx - 2, ly - 3, 5, 2, wStone);
+    // 柱身
+    pxVLine(ctx, lx, ly - 9, 7, wStone);
+    px(ctx, lx - 1, ly - 8, wStone); // 宽一点
+    // 灯龛
+    pxRect(ctx, lx - 2, ly - 12, 5, 4, wStone);
+    pxRect(ctx, lx - 1, ly - 12, 3, 3, '#FFE8B0'); // 烛光
+    px(ctx, lx, ly - 12, '#FFF0D0');               // 焰心
+    // 灯顶
+    pxRect(ctx, lx - 3, ly - 13, 7, 2, wStone);
+    px(ctx, lx - 2, ly - 14, wStone);
+    px(ctx, lx + 1, ly - 14, wStone);
+  }
+
+  // 石碑：底座 + 碑身 + 碑额
+  function drawStele(sx: number, sy: number, h: number): void {
+    const halfW = 3;
+    // 底座（龟趺简化）
+    pxRect(ctx, sx - halfW - 1, sy - 2, halfW * 2 + 3, 3, wStoneD);
+    pxRect(ctx, sx - halfW, sy - 4, halfW * 2 + 1, 3, wStone);
+    // 碑身
+    for (let dy = 0; dy < h; dy++) {
+      pxHLine(ctx, sx - halfW + 1, sy - 4 - h + dy, halfW * 2 - 1, dy % 3 === 0 ? wStone : wStoneD);
+    }
+    // 碑额（圆顶）
+    const top = sy - 4 - h;
+    pxRect(ctx, sx - halfW, top - 2, halfW * 2 + 1, 3, wStone);
+    px(ctx, sx - 1, top - 3, wStone);
+    px(ctx, sx, top - 3, wStoneD);
+  }
+
+  // 香炉：炉身 + 三足 + 烟
+  function drawIncenseBurner(ix: number, iy: number): void {
+    // 炉身
+    pxRect(ctx, ix - 4, iy - 6, 9, 7, wWood);
+    pxRect(ctx, ix - 3, iy - 5, 7, 5, wWoodL);
+    // 炉口
+    pxRect(ctx, ix - 5, iy - 7, 11, 2, wStoneD);
+    pxRect(ctx, ix - 4, iy - 8, 9, 1, wStone);
+    // 三足
+    pxRect(ctx, ix - 3, iy, 2, 2, wStoneD);
+    pxRect(ctx, ix + 1, iy, 2, 2, wStoneD);
+    // 双耳
+    pxRect(ctx, ix - 5, iy - 4, 2, 3, wStoneD);
+    pxRect(ctx, ix + 3, iy - 4, 2, 3, wStoneD);
+    // 烟
+    for (let s = 0; s < 2; s++) {
+      for (let j = 0; j < 5; j++) {
+        const sx2 = ix - 1 + s * 3 + (j % 2);
+        const sy2 = iy - 10 - j * 3;
+        if (sy2 > 0) px(ctx, sx2, sy2, j < 2 ? '#CCC' : '#DDD');
+      }
+    }
+  }
+
+  // ═══ 布局放置 ═══
+
+  // ── 远景层（y: 120-200, 淡灰, 小比例） ──
+  // 左上远墙
+  drawLowWall(60, 155, 80, 6); shadow(100, 161, 42, 6);
+  // 右上远墙
+  drawLowWall(W - 140, 150, 90, 5); shadow(W - 95, 155, 48, 5);
+  // 远处小牌坊（左上）
+  shadow(170, 148, 14, 10);
+  drawSmallGate(170, 148, 0.8);
+  // 远处小偏殿（右上）
+  shadow(W - 120, 160, 22, 12);
+  drawSideHall(W - 120, 160, 24, 28, 0.8);
+  // 远处石碑
+  drawStele(80, 170, 8);
+  shadow(80, 170, 5, 4);
+
+  // ── 中景层（y: 250-350, 正常色） ──
+  // 左上牌坊
+  shadow(130, 265, 16, 12);
+  drawSmallGate(130, 265, 1.0);
+  // 左侧院墙
+  drawLowWall(30, 280, 70, 7); shadow(65, 287, 38, 6);
+  // 右侧围墙
+  drawLowWall(W - 130, 290, 90, 6); shadow(W - 85, 296, 48, 5);
+  // 左侧偏殿
+  shadow(90, 330, 28, 18);
+  drawSideHall(90, 330, 32, 36, 1.0);
+  // 右侧小偏殿
+  shadow(W - 80, 325, 22, 15);
+  drawSideHall(W - 80, 325, 26, 30, 0.9);
+
+  // ── 近景层（y: 380-500, 深色, 略大） ──
+  // 左前石灯
+  shadow(55, 400, 6, 4);
+  drawStoneLantern(55, 400);
+  // 右前石灯
+  shadow(W - 65, 395, 6, 4);
+  drawStoneLantern(W - 65, 395);
+  // 香炉（左下）
+  shadow(120, 430, 8, 6);
+  drawIncenseBurner(120, 430);
+  // 石碑（右侧）
+  shadow(W - 150, 420, 6, 5);
+  drawStele(W - 150, 420, 10);
+  // 右侧围墙段
+  drawLowWall(W - 100, 440, 70, 7); shadow(W - 65, 447, 38, 6);
+  // 左侧围墙段
+  drawLowWall(20, 460, 55, 6); shadow(48, 466, 30, 5);
+  // 右侧近处偏殿（稍大）
+  shadow(W - 60, 460, 28, 20);
+  drawSideHall(W - 60, 460, 30, 38, 1.1);
+  // 左侧小牌坊
+  shadow(70, 480, 14, 10);
+  drawSmallGate(70, 480, 0.9);
+
+  // ── 7. 底部暗角 ──
+  for (let gy = H - 20; gy < H; gy++) {
+    for (let gx = 0; gx < W; gx++) {
+      if (hash(gx, gy) % 5 === 0) {
+        px(ctx, gx, gy, sDark[gx % 5]);
+      }
+    }
+  }
+
+  // ── 8. 四角聚焦暗角 ──
+  const corners = [[0,0],[W-1,0],[0,H-1],[W-1,H-1]];
+  for (const [cx2, cy2] of corners) {
+    for (let dy = 0; dy < 50; dy++) {
+      for (let dx = 0; dx < 50; dx++) {
+        const qx = cx2 === 0 ? dx : W - 1 - dx;
+        const qy = cy2 === 0 ? dy : H - 1 - dy;
+        if (Math.sqrt(dx*dx + dy*dy) < 40 && hash(qx, qy) % 6 === 0) {
+          px(ctx, qx, qy, sDark[(qx + qy) % 5]);
+        }
+      }
     }
   }
 
@@ -975,4 +1208,304 @@ function genSkillTextures(scene: Phaser.Scene) {
     px(ctx, cx2 + 1, cy2 + 2, PAL.lightBlue);
     addTex(scene, 'paint_ball', canvas);
   }
+}
+
+// ═══════════════════════════════════════════════
+// UI 纹理 — 像素风面板和按钮（Canvas2D 程序化）
+// ═══════════════════════════════════════════════
+
+/** 装饰面板：深色底 + 金色边框 + 四角花纹 */
+export function genOrnatePanel(
+  scene: Phaser.Scene, key: string,
+  w: number, h: number,
+  borderColor: string, bgColor: string,
+): void {
+  if (scene.textures.exists(key)) return;
+  const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+  // 背景
+  pxRect(ctx, 0, 0, w, h, bgColor);
+  // 边框
+  pxRect(ctx, 0, 0, w, 1, borderColor);
+  pxRect(ctx, 0, h - 1, w, 1, borderColor);
+  pxRect(ctx, 0, 0, 1, h, borderColor);
+  pxRect(ctx, w - 1, 0, 1, h, borderColor);
+  // 内框
+  pxRect(ctx, 2, 2, w - 4, 1, borderColor);
+  pxRect(ctx, 2, h - 3, w - 4, 1, borderColor);
+  pxRect(ctx, 2, 2, 1, h - 4, borderColor);
+  pxRect(ctx, w - 3, 2, 1, h - 4, borderColor);
+  // 四角装饰
+  px(ctx, 1, 1, borderColor);
+  px(ctx, w - 2, 1, borderColor);
+  px(ctx, 1, h - 2, borderColor);
+  px(ctx, w - 2, h - 2, borderColor);
+  addTex(scene, key, canvas);
+}
+
+/** 像素按钮：暖棕底 + 金色边框 + 悬停高亮 */
+export function genPixelButton(
+  scene: Phaser.Scene, key: string,
+  w: number, h: number,
+  bgColor: string, borderColor: string,
+): void {
+  // 正常态
+  {
+    const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+    pxRect(ctx, 0, 0, w, h, bgColor);
+    pxRect(ctx, 0, 0, w, 1, borderColor);
+    pxRect(ctx, 0, h - 1, w, 1, borderColor);
+    pxRect(ctx, 0, 0, 1, h, borderColor);
+    pxRect(ctx, w - 1, 0, 1, h, borderColor);
+    pxRect(ctx, 1, 1, w - 2, 1, '#00000022');
+    pxRect(ctx, 1, h - 2, w - 2, 1, '#00000044');
+    addTex(scene, key + '_normal', canvas);
+  }
+  // 悬停态（更亮）
+  {
+    const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+    const lighter = bgColor; // 简化：颜色由外部控制
+    pxRect(ctx, 0, 0, w, h, lighter);
+    pxRect(ctx, 0, 0, w, 1, '#FFFFFF');
+    pxRect(ctx, 0, h - 1, w, 1, '#FFFFFF');
+    pxRect(ctx, 0, 0, 1, h, '#FFFFFF');
+    pxRect(ctx, w - 1, 0, 1, h, '#FFFFFF');
+    addTex(scene, key + '_hover', canvas);
+  }
+  // 按压态
+  {
+    const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+    const darker = '#2D1B0E';
+    pxRect(ctx, 0, 0, w, h, darker);
+    pxRect(ctx, 0, 0, w, 1, '#B8960A');
+    pxRect(ctx, 0, h - 1, w, 1, '#B8960A');
+    pxRect(ctx, 0, 0, 1, h, '#B8960A');
+    pxRect(ctx, w - 1, 0, 1, h, '#B8960A');
+    addTex(scene, key + '_press', canvas);
+  }
+}
+
+// ═══════════════════════════════════
+// 像素框架
+// ═══════════════════════════════════
+
+function genPixelFrame(scene: Phaser.Scene, key: string, w: number, h: number, borderColor: string, bgColor: string): void {
+  if (scene.textures.exists(key)) return;
+  const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+  pxRect(ctx, 0, 0, w, h, bgColor);
+  pxRect(ctx, 0, 0, 2, 2, borderColor); pxRect(ctx, w - 2, 0, 2, 2, borderColor);
+  pxRect(ctx, 0, h - 2, 2, 2, borderColor); pxRect(ctx, w - 2, h - 2, 2, 2, borderColor);
+  pxHLine(ctx, 2, 0, w - 4, borderColor); pxHLine(ctx, 2, h - 1, w - 4, borderColor);
+  pxVLine(ctx, 0, 2, h - 4, borderColor); pxVLine(ctx, w - 1, 2, h - 4, borderColor);
+  addTex(scene, key, canvas);
+}
+
+// ═══════════════════════════════════
+// 血条底板 — 带刻度标记
+// ═══════════════════════════════════
+
+function genBarBg(scene: Phaser.Scene, key: string, w: number, h: number, bgColor: string, borderColor: string, notchColor: string): void {
+  const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+  pxRect(ctx, 0, 0, w, h, bgColor);
+  pxHLine(ctx, 0, 0, w, borderColor); pxHLine(ctx, 0, h - 1, w, borderColor);
+  pxVLine(ctx, 0, 0, h, borderColor); pxVLine(ctx, w - 1, 0, h, borderColor);
+  px(ctx, 0, 0, borderColor); px(ctx, w - 1, 0, borderColor);
+  px(ctx, 0, h - 1, borderColor); px(ctx, w - 1, h - 1, borderColor);
+  for (const mx of [Math.floor(w * 0.25), Math.floor(w * 0.5), Math.floor(w * 0.75)]) {
+    px(ctx, mx, 1, notchColor); px(ctx, mx, h - 2, notchColor);
+  }
+  addTex(scene, key, canvas);
+}
+
+// ═══════════════════════════════════
+// 血条填充 — 带顶/底高光
+// ═══════════════════════════════════
+
+function genBarFill(scene: Phaser.Scene, key: string, w: number, h: number, fillColor: string): void {
+  const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+  pxRect(ctx, 0, 0, w, h, fillColor);
+  const r = parseInt(fillColor.slice(1, 3), 16), g = parseInt(fillColor.slice(3, 5), 16), b = parseInt(fillColor.slice(5, 7), 16);
+  pxHLine(ctx, 0, 0, w, `rgb(${Math.min(255, r + 60)},${Math.min(255, g + 60)},${Math.min(255, b + 60)})`);
+  pxHLine(ctx, 0, h - 1, w, `rgb(${Math.max(0, r - 50)},${Math.max(0, g - 50)},${Math.max(0, b - 50)})`);
+  addTex(scene, key, canvas);
+}
+
+// ═══════════════════════════════════
+// 经验条外框
+// ═══════════════════════════════════
+
+function genExpBarFrame(scene: Phaser.Scene): void {
+  const w = 1000, h = 12, b = '#8A8A80';
+  const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+  pxRect(ctx, 0, 0, w, h, '#1A1410');
+  pxHLine(ctx, 0, 0, w, b); pxHLine(ctx, 0, h - 1, w, b);
+  pxVLine(ctx, 0, 0, h, b); pxVLine(ctx, w - 1, 0, h, b);
+  for (const dx of [0, w - 1]) { px(ctx, dx, 0, '#DAA520'); px(ctx, dx, h - 1, '#DAA520'); }
+  for (const dx of [2, w - 6]) { px(ctx, dx, h / 2 - 1, '#DAA520'); px(ctx, dx + 1, h / 2, '#DAA520'); px(ctx, dx, h / 2 + 1, '#DAA520'); }
+  addTex(scene, 'exp_bar_frame', canvas);
+}
+
+// ═══════════════════════════════════
+// 计时面板
+// ═══════════════════════════════════
+
+function genTimerPanel(scene: Phaser.Scene): void {
+  genPixelFrame(scene, 'timer_panel', 80, 28, '#DAA520', '#1E1810');
+}
+
+// ═══════════════════════════════════
+// 像素图标（12×12 像素格 = 24×24 物理px）
+// ═══════════════════════════════════
+
+function genIconStructWood(scene: Phaser.Scene): void {
+  const S = 12; const { canvas, ctx } = makeCanvas(S * PX, S * PX);
+  pxRect(ctx, 1, 1, 10, 10, '#C4884D');
+  pxHLine(ctx, 1, 3, 10, '#B0783D'); pxHLine(ctx, 1, 6, 10, '#D4985D'); pxHLine(ctx, 1, 9, 10, '#B0783D');
+  px(ctx, 5, 5, '#8B6914'); px(ctx, 7, 4, '#8B6914');
+  pxHLine(ctx, 0, 0, S, '#5C3A1E'); pxHLine(ctx, 0, S - 1, S, '#5C3A1E');
+  pxVLine(ctx, 0, 0, S, '#5C3A1E'); pxVLine(ctx, S - 1, 0, S, '#5C3A1E');
+  addTex(scene, 'icon_wood', canvas);
+}
+
+function genIconStructStone(scene: Phaser.Scene): void {
+  const S = 12; const { canvas, ctx } = makeCanvas(S * PX, S * PX);
+  pxRect(ctx, 1, 1, 10, 10, '#8A8A80');
+  pxHLine(ctx, 1, 5, 10, '#999990'); pxVLine(ctx, 5, 1, 4, '#777770'); pxVLine(ctx, 3, 5, 5, '#777770');
+  px(ctx, 4, 4, '#AAAAA0'); px(ctx, 8, 7, '#AAAAA0');
+  pxHLine(ctx, 0, 0, S, '#555550'); pxHLine(ctx, 0, S - 1, S, '#555550');
+  pxVLine(ctx, 0, 0, S, '#555550'); pxVLine(ctx, S - 1, 0, S, '#555550');
+  addTex(scene, 'icon_stone', canvas);
+}
+
+function genIconStructTile(scene: Phaser.Scene): void {
+  const S = 12; const { canvas, ctx } = makeCanvas(S * PX, S * PX);
+  pxRect(ctx, 1, 1, 10, 10, '#C04040');
+  for (let r = 0; r < 3; r++) {
+    const ry = 2 + r * 3; pxHLine(ctx, 2, ry, 8, '#8B2020'); pxHLine(ctx, 2, ry + 1, 8, '#D06050');
+  }
+  pxHLine(ctx, 0, 0, S, '#6B1010'); pxHLine(ctx, 0, S - 1, S, '#6B1010');
+  pxVLine(ctx, 0, 0, S, '#6B1010'); pxVLine(ctx, S - 1, 0, S, '#6B1010');
+  addTex(scene, 'icon_tile', canvas);
+}
+
+function genIconStructPainting(scene: Phaser.Scene): void {
+  const S = 12; const { canvas, ctx } = makeCanvas(S * PX, S * PX);
+  pxRect(ctx, 1, 1, 10, 10, '#9966CC');
+  pxHLine(ctx, 1, 2, 10, '#CC88EE'); pxHLine(ctx, 1, 4, 10, '#FFCC44');
+  pxHLine(ctx, 1, 6, 10, '#88CCEE'); pxHLine(ctx, 1, 8, 10, '#FF8888');
+  px(ctx, 3, 3, '#FFFFFF'); px(ctx, 8, 5, '#FFFFFF');
+  pxHLine(ctx, 0, 0, S, '#553388'); pxHLine(ctx, 0, S - 1, S, '#553388');
+  pxVLine(ctx, 0, 0, S, '#553388'); pxVLine(ctx, S - 1, 0, S, '#553388');
+  addTex(scene, 'icon_painting', canvas);
+}
+
+function genIconTimer(scene: Phaser.Scene): void {
+  const S = 10; const { canvas, ctx } = makeCanvas(S * PX, S * PX);
+  pxRect(ctx, 3, 1, 4, 1, '#DAA520'); pxRect(ctx, 2, 2, 6, 1, '#DAA520');
+  pxRect(ctx, 2, 3, 2, 2, '#DAA520'); pxRect(ctx, 6, 3, 2, 2, '#DAA520');
+  pxRect(ctx, 3, 4, 4, 1, '#8A8A80');
+  pxRect(ctx, 2, 5, 2, 2, '#DAA520'); pxRect(ctx, 6, 5, 2, 2, '#DAA520');
+  pxRect(ctx, 2, 7, 6, 1, '#DAA520'); pxRect(ctx, 3, 8, 4, 1, '#DAA520');
+  px(ctx, 4, 4, '#FFD700');
+  addTex(scene, 'icon_timer', canvas);
+}
+
+function genIconClose(scene: Phaser.Scene): void {
+  const S = 8; const { canvas, ctx } = makeCanvas(S * PX, S * PX);
+  for (const [x, y] of [[1,1],[6,1],[2,2],[5,2],[3,3],[4,3],[3,4],[4,4],[2,5],[5,5],[1,6],[6,6]]) px(ctx, x, y, '#C04040');
+  addTex(scene, 'icon_close', canvas);
+}
+
+function genIconDiamond(scene: Phaser.Scene): void {
+  const S = 6; const { canvas, ctx } = makeCanvas(S * PX, S * PX);
+  px(ctx, 3, 0, '#FFD700'); px(ctx, 2, 1, '#FFD700'); px(ctx, 4, 1, '#FFD700');
+  px(ctx, 1, 2, '#DAA520'); px(ctx, 3, 2, '#FFD700'); px(ctx, 5, 2, '#DAA520');
+  px(ctx, 2, 3, '#DAA520'); px(ctx, 4, 3, '#DAA520'); px(ctx, 3, 4, '#DAA520');
+  addTex(scene, 'icon_diamond', canvas);
+}
+
+function genIconExp(scene: Phaser.Scene): void {
+  const S = 8, cx = 4, cy = 4; const { canvas, ctx } = makeCanvas(S * PX, S * PX);
+  px(ctx, cx, cy - 3, '#44FF88'); px(ctx, cx - 1, cy - 2, '#44FF88'); px(ctx, cx + 1, cy - 2, '#44FF88');
+  px(ctx, cx - 2, cy - 1, '#44CC66'); px(ctx, cx, cy - 1, '#FFFFFF'); px(ctx, cx + 2, cy - 1, '#44CC66');
+  px(ctx, cx - 2, cy, '#44CC66'); px(ctx, cx + 2, cy, '#44CC66');
+  px(ctx, cx - 1, cy + 1, '#44FF88'); px(ctx, cx + 1, cy + 1, '#44FF88'); px(ctx, cx, cy + 2, '#44FF88');
+  addTex(scene, 'icon_exp', canvas);
+}
+
+// ═══════════════════════════════════
+// 菜单背景 + 柱子 + 标题横幅
+// ═══════════════════════════════════
+
+function genMenuBg(scene: Phaser.Scene): void {
+  const W = 512, H = 384; const { canvas, ctx } = makeCanvas(W * PX, H * PX);
+  pxRect(ctx, 0, 0, W, H, '#1A1410');
+  for (let i = 0; i < 1200; i++) px(ctx, Math.floor(Math.random() * W), Math.floor(Math.random() * H), ['#2A1A10','#2A2018','#221810','#1E1810'][i % 4]);
+  const m = 4;
+  pxHLine(ctx, 0, 0, W, '#DAA520'); pxHLine(ctx, 0, H - 1, W, '#DAA520');
+  pxVLine(ctx, 0, 0, H, '#DAA520'); pxVLine(ctx, W - 1, 0, H, '#DAA520');
+  pxHLine(ctx, m, m, W - m * 2, '#5C3A1E'); pxHLine(ctx, m, H - m - 1, W - m * 2, '#5C3A1E');
+  pxVLine(ctx, m, m, H - m * 2, '#5C3A1E'); pxVLine(ctx, W - m - 1, m, H - m * 2, '#5C3A1E');
+  for (const [cx, cy] of [[m,m],[W-m-1,m],[m,H-m-1],[W-m-1,H-m-1]]) { px(ctx, cx, cy, '#FFD700'); px(ctx, cx+1, cy, '#DAA520'); px(ctx, cx, cy+1, '#DAA520'); }
+  addTex(scene, 'menu_bg', canvas);
+}
+
+function genPillar(scene: Phaser.Scene): void {
+  const w = 16, h = 768; const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+  pxRect(ctx, 0, 0, w, h, '#C04040');
+  for (let y = 0; y < h; y += 3) pxHLine(ctx, 1, y, w - 2, y % 6 === 0 ? '#D05050' : '#B03030');
+  pxRect(ctx, 2, h - 12, w - 4, 12, '#8A8A80'); pxRect(ctx, 3, h - 14, w - 6, 3, '#999990');
+  pxRect(ctx, 2, 0, w - 4, 14, '#8A8A80'); pxRect(ctx, 3, 12, w - 6, 3, '#999990');
+  pxHLine(ctx, 2, 5, w - 4, '#FFD700'); pxHLine(ctx, 2, 8, w - 4, '#FFD700');
+  pxVLine(ctx, 3, 14, h - 28, '#DAA520');
+  addTex(scene, 'pillar', canvas);
+}
+
+function genTitleBanner(scene: Phaser.Scene): void {
+  const w = 420, h = 60; const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+  pxRect(ctx, 0, 0, w, h, '#3E2510');
+  for (let i = 0; i < 3; i++) { pxHLine(ctx, 0, i, w, ['#FFD700','#DAA520','#B8960A'][i]); pxHLine(ctx, 0, h-1-i, w, ['#FFD700','#DAA520','#B8960A'][i]); }
+  pxVLine(ctx, 0, 0, h, '#DAA520'); pxVLine(ctx, w - 1, 0, h, '#DAA520');
+  for (const dx of [12, w - 16]) { px(ctx, dx, h/2-1, '#FFD700'); px(ctx, dx+1, h/2, '#FFD700'); px(ctx, dx, h/2+1, '#FFD700'); }
+  addTex(scene, 'title_banner', canvas);
+}
+
+function genPixelBorder16(scene: Phaser.Scene): void {
+  const S = 16, bc = '#DAA520'; const { canvas, ctx } = makeCanvas(S * PX, S * PX);
+  pxRect(ctx, 0, 0, S, S, '#1E1810');
+  pxRect(ctx, 0, 0, 2, 2, bc); pxRect(ctx, S-2, 0, 2, 2, bc); pxRect(ctx, 0, S-2, 2, 2, bc); pxRect(ctx, S-2, S-2, 2, 2, bc);
+  pxHLine(ctx, 2, 0, S-4, bc); pxHLine(ctx, 2, S-1, S-4, bc); pxVLine(ctx, 0, 2, S-4, bc); pxVLine(ctx, S-1, 2, S-4, bc);
+  addTex(scene, 'pixel_border', canvas);
+}
+
+// ═══════════════════════════════════
+// 怪物血条
+// ═══════════════════════════════════
+
+function genHPBarMonster(scene: Phaser.Scene): void {
+  { const w = 20, h = 4; const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+    pxRect(ctx, 0, 0, w, h, '#333333'); pxHLine(ctx, 0, 0, w, '#555555'); pxHLine(ctx, 0, h - 1, w, '#111111');
+    addTex(scene, 'hp_monster_bg', canvas); }
+  { const w = 20, h = 4; const { canvas, ctx } = makeCanvas(w * PX, h * PX);
+    pxRect(ctx, 0, 0, w, h, '#44CC44'); pxHLine(ctx, 0, 0, w, '#88EE88');
+    addTex(scene, 'hp_monster_fill', canvas); }
+}
+
+// ═══════════════════════════════════
+// UI 总入口
+// ═══════════════════════════════════
+
+function genUIAllTextures(scene: Phaser.Scene): void {
+  genBarBg(scene, 'bar_bg', 160, 14, '#2A2218', '#5C3A1E', '#3E2510');
+  genBarFill(scene, 'bar_fill_wood', 160, 14, '#C4884D');
+  genBarFill(scene, 'bar_fill_stone', 160, 14, '#8A8A80');
+  genBarFill(scene, 'bar_fill_tile', 160, 14, '#C04040');
+  genBarFill(scene, 'bar_fill_painting', 160, 14, '#9966CC');
+  genBarFill(scene, 'bar_fill_exp', 1000, 12, '#4488CC');
+  genExpBarFrame(scene);
+  genTimerPanel(scene);
+  genPixelBorder16(scene);
+  genIconStructWood(scene); genIconStructStone(scene); genIconStructTile(scene); genIconStructPainting(scene);
+  genIconTimer(scene); genIconClose(scene); genIconDiamond(scene); genIconExp(scene);
+  genMenuBg(scene); genPillar(scene); genTitleBanner(scene);
+  genHPBarMonster(scene);
 }

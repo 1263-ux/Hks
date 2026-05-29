@@ -74,6 +74,7 @@ export class GameScene extends Phaser.Scene {
   private isGameOver = false;
   private isPaused = false;
   private killCount = 0;
+  private seenMonsterTypes = new Set<MonsterType>();
 
   // 自动普攻
   private autoAttackTimer = 0;
@@ -187,16 +188,11 @@ export class GameScene extends Phaser.Scene {
     this.hud.update(this.player, this.building, this.gameTime);
   }
 
-  // ── 背景 ──
+  // ── 背景（全地图单张，不重复） ──
   private drawBackground(): void {
     const tex = this.textures.get('background');
     if (tex) {
-      const tw = 480, th = 270;
-      for (let x = 0; x < MAP_WIDTH; x += tw) {
-        for (let y = 0; y < MAP_HEIGHT; y += th) {
-          this.add.image(x + tw / 2, y + th / 2, 'background').setDepth(0);
-        }
-      }
+      this.add.image(MAP_WIDTH / 2, MAP_HEIGHT / 2, 'background').setDepth(0);
     } else {
       const bg = this.add.graphics();
       bg.fillStyle(0x2d5a1e, 1);
@@ -264,6 +260,14 @@ export class GameScene extends Phaser.Scene {
     };
 
     this.monsters.push(monster);
+
+    // 首次遭遇弹窗
+    if (!this.seenMonsterTypes.has(type)) {
+      this.seenMonsterTypes.add(type);
+      this.time.delayedCall(300, () => {
+        if (!this.isGameOver) this.hud.showMonsterPopup(type);
+      });
+    }
   }
 
   // ── 经验球 ──

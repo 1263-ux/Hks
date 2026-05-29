@@ -242,12 +242,12 @@ export const PALETTE = {
 
 /** 像素风字体预设 — 统一用 monospace 偶数字号，在 pixelArt:true 下足够锐利 */
 export const FONT = {
-  tiny:     { fontFamily: 'monospace', fontSize: '8px' },
-  small:    { fontFamily: 'monospace', fontSize: '10px' },
-  body:     { fontFamily: 'monospace', fontSize: '12px' },
-  large:    { fontFamily: 'monospace', fontSize: '16px' },
-  title:    { fontFamily: 'monospace', fontSize: '20px', fontStyle: 'bold' },
-  huge:     { fontFamily: 'monospace', fontSize: '32px', fontStyle: 'bold' },
+  tiny:     { fontFamily: 'monospace', fontSize: '10px' },
+  small:    { fontFamily: 'monospace', fontSize: '14px' },
+  body:     { fontFamily: 'monospace', fontSize: '16px' },
+  large:    { fontFamily: 'monospace', fontSize: '20px' },
+  title:    { fontFamily: 'monospace', fontSize: '24px', fontStyle: 'bold' },
+  huge:     { fontFamily: 'monospace', fontSize: '40px', fontStyle: 'bold' },
 } as const;
 
 /** 像素纹理的单位块大小（与 ArtGen.ts 中的 PX 一致） */

@@ -84,10 +84,11 @@ export class VFX {
   static hitMonster(scene: Phaser.Scene, x: number, y: number, damage: number): void {
     // 白碎屑
     VFX.burst(scene, x, y, 3, [0xffffff, 0xcccccc], 60, 2, 200);
-    // 伤害数字（大伤害红色）
+    // 伤害数字（大伤害红色，偶数字号）
     const color = damage >= 20 ? '#ff4444' : damage >= 10 ? '#ffaa44' : '#ffffff';
-    const size = damage >= 20 ? '16px' : '13px';
-    VFX.floatText(scene, x, y, `${Math.round(damage)}`, color, size);
+    const size = damage >= 20 ? '16px' : '14px';
+    // 微小随机抖动（复古像素感）
+    VFX.floatText(scene, x + (Math.random() - 0.5) * 4, y, `${Math.round(damage)}`, color, size);
     // 微震
     if (damage >= 15) VFX.shake(scene, 0.002, 50);
   }

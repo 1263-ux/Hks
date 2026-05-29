@@ -3,6 +3,9 @@ import {
   MAP_WIDTH, MAP_HEIGHT, GAME_WIDTH, GAME_HEIGHT, GAME_DURATION,
   PLAYER_CONFIG, BUILDING_CONFIG, MONSTER_TEMPLATES,
   SPAWN_DISTANCE, INITIAL_SPAWN_INTERVAL, SPAWN_WEIGHTS,
+  EXP_ORB_CONFIG, PICKUP_RANGE,
+  BASE_EXP_TO_LEVEL, EXP_PER_LEVEL, ALL_SKILL_IDS,
+  SKILL_CONFIGS,
   MonsterType, SkillId,
 } from './config';
 import { Player } from './Player';
@@ -28,6 +31,23 @@ interface AutoBolt {
   lifetime: number;
 }
 
+// ── 经验球 ──
+interface ExpOrb {
+  graphic: Phaser.GameObjects.Arc;
+  value: number;
+  x: number; y: number;
+  lifetime: number;
+}
+
+// ── 升级选项 ──
+interface LevelUpOption {
+  id: SkillId;
+  name: string;
+  level: number;
+  isUpgrade: boolean;
+  description: string;
+}
+
 export class GameScene extends Phaser.Scene {
   private player!: Player;
   private building!: Building;
@@ -35,11 +55,13 @@ export class GameScene extends Phaser.Scene {
   private skillManager!: SkillManager;
   private monsters: Monster[] = [];
   private puddles: Puddle[] = [];
+  private expOrbs: ExpOrb[] = [];
 
   private gameTime = GAME_DURATION;
   private spawnTimer = 0;
   private spawnInterval = INITIAL_SPAWN_INTERVAL;
   private isGameOver = false;
+  private isPaused = false;
   private killCount = 0;
 
   // 自动普攻
@@ -47,6 +69,9 @@ export class GameScene extends Phaser.Scene {
   private readonly autoAttackCooldown = 0.7;
   private readonly autoAttackDamage = 8;
   private autoBolts: AutoBolt[] = [];
+
+  // 升级面板状态
+  private levelUpPanelActive = false;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -56,47 +81,39 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
     this.drawBackground();
 
-    // 古建
     this.building = new Building(
-      this,
-      BUILDING_CONFIG.x, BUILDING_CONFIG.y,
+      this, BUILDING_CONFIG.x, BUILDING_CONFIG.y,
       BUILDING_CONFIG.structures as any,
     );
     this.building.onFailure = () => this.endGame(false);
 
-    // 玩家
     this.player = new Player(
-      this,
-      BUILDING_CONFIG.x,
+      this, BUILDING_CONFIG.x,
       BUILDING_CONFIG.y + PLAYER_CONFIG.startOffsetY,
-      PLAYER_CONFIG.maxHp,
-      PLAYER_CONFIG.moveSpeed,
-      PLAYER_CONFIG.radius,
-      PLAYER_CONFIG.color,
+      PLAYER_CONFIG.maxHp, PLAYER_CONFIG.moveSpeed,
+      PLAYER_CONFIG.radius, PLAYER_CONFIG.color,
     );
-
     this.cameras.main.startFollow(this.player.sprite, true, 0.09, 0.09);
 
-    // HUD
     this.hud = new HUD(this);
 
-    // 技能管理器
     this.skillManager = new SkillManager(
-      this,
-      () => this.monsters,
-      () => this.player,
-      () => this.building,
+      this, () => this.monsters, () => this.player, () => this.building,
     );
-    this.skillManager.addSkill('wood_reinforce'); // 初始自带
+    this.skillManager.addSkill('wood_reinforce');
 
-    // 调试键
     this.setupDebugControls();
   }
 
   update(time: number, delta: number): void {
     if (this.isGameOver) return;
 
-    // 玩家
+    if (this.isPaused) {
+      // 暂停期间仅更新 HUD（血量条）
+      this.hud.update(this.player, this.building, this.gameTime);
+      return;
+    }
+
     this.player.update(delta);
 
     // 刷怪
@@ -111,14 +128,12 @@ export class GameScene extends Phaser.Scene {
       m.update(time, delta);
     }
 
-    // 玩家-怪物碰撞
     this.checkPlayerMonsterCollision();
-
-    // 冻融怪减速检测
     this.checkFreezeAura();
-
-    // 清理死怪
     this.monsters = this.monsters.filter(m => !m.isDead);
+
+    // 经验球更新
+    this.updateExpOrbs(delta);
 
     // 自动普攻
     this.updateAutoAttack(delta);
@@ -126,19 +141,18 @@ export class GameScene extends Phaser.Scene {
     // 技能更新
     this.skillManager.update(delta, time);
 
-    // 水洼更新
+    // 水洼/灼烧
     this.updatePuddles(delta);
-
-    // 灼烧更新
     this.building.updateBurn(delta);
 
-    // 玩家死亡
+    // 升级检测（在经验球拾取后）
+    this.checkLevelUp();
+
     if (this.player.isDead) {
       this.endGame(false);
       return;
     }
 
-    // 倒计时
     this.gameTime -= delta / 1000;
     if (this.gameTime <= 0) {
       this.gameTime = 0;
@@ -166,7 +180,7 @@ export class GameScene extends Phaser.Scene {
     bg.setDepth(0);
   }
 
-  // ── 刷怪：权重随机 ──
+  // ── 刷怪 ──
   private spawnMonster(): void {
     const type = this.weightedRandomType();
     const template = MONSTER_TEMPLATES[type];
@@ -180,250 +194,297 @@ export class GameScene extends Phaser.Scene {
       BUILDING_CONFIG.attackRange,
     );
 
-    // 攻击回调
     monster.onAttack = (m) => {
       for (const structType of m.attackStructures) {
         this.building.damageStructure(structType, m.damage);
       }
-      // 酸雨怪生成水洼
-      if (m.type === 'acid_rain') {
-        this.addPuddle(m.x, m.y);
-      }
-      // 火焰怪施加灼烧
+      if (m.type === 'acid_rain') this.addPuddle(m.x, m.y);
       if (m.type === 'fire') {
-        for (const st of m.attackStructures) {
-          this.building.applyBurn(st, 5, 2);
-        }
+        for (const st of m.attackStructures) this.building.applyBurn(st, 5, 2);
       }
     };
 
-    // 接触玩家回调（风蚀怪击退）
     monster.onPlayerContact = (m) => {
-      if (m.type === 'wind') {
-        this.player.applyKnockback(m.x, m.y, 250);
-      }
+      if (m.type === 'wind') this.player.applyKnockback(m.x, m.y, 250);
     };
 
-    // 死亡回调
-    monster.onDeath = () => {
+    monster.onDeath = (m) => {
       this.killCount++;
+      this.spawnExpOrb(m.x, m.y, m.expDrop);
     };
 
     this.monsters.push(monster);
   }
 
   private weightedRandomType(): MonsterType {
-    const totalWeight = SPAWN_WEIGHTS.reduce((s, w) => s + w.weight, 0);
-    let r = Math.random() * totalWeight;
-    for (const entry of SPAWN_WEIGHTS) {
-      r -= entry.weight;
-      if (r <= 0) return entry.type;
+    const total = SPAWN_WEIGHTS.reduce((s, w) => s + w.weight, 0);
+    let r = Math.random() * total;
+    for (const e of SPAWN_WEIGHTS) {
+      r -= e.weight;
+      if (r <= 0) return e.type;
     }
     return 'termite';
   }
 
-  // ── 玩家-怪物碰撞 ──
+  // ── 经验球 ──
+  private spawnExpOrb(x: number, y: number, value: number): void {
+    const orb = this.add.circle(x, y, EXP_ORB_CONFIG.radius, EXP_ORB_CONFIG.color);
+    orb.setDepth(8);
+    this.expOrbs.push({
+      graphic: orb, value, x, y,
+      lifetime: EXP_ORB_CONFIG.lifetime,
+    });
+  }
+
+  private updateExpOrbs(delta: number): void {
+    const dt = delta / 1000;
+    for (const orb of this.expOrbs) {
+      orb.lifetime -= dt;
+      if (orb.lifetime <= 0) {
+        orb.graphic.destroy();
+        continue;
+      }
+
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, orb.x, orb.y);
+      if (dist < PICKUP_RANGE) {
+        // 吸附
+        const a = Math.atan2(this.player.y - orb.y, this.player.x - orb.x);
+        orb.x += Math.cos(a) * EXP_ORB_CONFIG.attractSpeed * dt;
+        orb.y += Math.sin(a) * EXP_ORB_CONFIG.attractSpeed * dt;
+        orb.graphic.x = orb.x;
+        orb.graphic.y = orb.y;
+
+        // 收集
+        if (dist < EXP_ORB_CONFIG.collectDist) {
+          this.player.exp += orb.value;
+          orb.graphic.destroy();
+        }
+      }
+
+      // 闪烁（快过期时）
+      if (orb.lifetime < 5) {
+        orb.graphic.setAlpha(Math.sin(orb.lifetime * 10) > 0 ? 1 : 0.3);
+      }
+    }
+    this.expOrbs = this.expOrbs.filter(o => o.lifetime > 0 && o.graphic.active);
+  }
+
+  // ── 升级检测 ──
+  private checkLevelUp(): void {
+    if (this.levelUpPanelActive) return;
+    if (this.player.exp >= this.player.expToNext) {
+      this.player.exp -= this.player.expToNext;
+      this.player.level++;
+      this.player.expToNext = BASE_EXP_TO_LEVEL + this.player.level * EXP_PER_LEVEL;
+      this.pauseForLevelUp();
+    }
+  }
+
+  // ── 暂停并显示升级面板 ──
+  private pauseForLevelUp(): void {
+    this.isPaused = true;
+    this.levelUpPanelActive = true;
+
+    const options = this.generateSkillOptions();
+    if (options.length === 0) {
+      // 所有技能已满级，不显示面板
+      this.isPaused = false;
+      this.levelUpPanelActive = false;
+      return;
+    }
+
+    this.hud.showLevelUpPanel(options, (id, isUpgrade) => {
+      if (isUpgrade) {
+        const oldLevel = this.skillManager.getSkillLevel(id);
+        this.skillManager.upgradeSkill(id);
+        this.hud.showSkillPopup(id, oldLevel + 1);
+      } else {
+        this.skillManager.addSkill(id);
+        this.hud.showSkillPopup(id, 1);
+      }
+      this.hud.hideLevelUpPanel();
+      this.isPaused = false;
+      this.levelUpPanelActive = false;
+    });
+  }
+
+  // ── 技能池生成 ──
+  private generateSkillOptions(): LevelUpOption[] {
+    const pool: LevelUpOption[] = [];
+
+    // 未获得的基础技能
+    for (const skillId of ALL_SKILL_IDS) {
+      if (this.skillManager.getSkillLevel(skillId) === 0) {
+        const cfg = SKILL_CONFIGS[skillId][0];
+        pool.push({
+          id: skillId, name: cfg.name, level: 1,
+          isUpgrade: false,
+          description: this.getSkillDescription(skillId, 1),
+        });
+      }
+    }
+
+    // 已获得但未满级的升级
+    for (const skill of this.skillManager.skills) {
+      if (skill.level < skill.maxLevel) {
+        const nextLevel = skill.level + 1;
+        const cfg = SKILL_CONFIGS[skill.id][nextLevel - 1];
+        pool.push({
+          id: skill.id, name: cfg.name, level: nextLevel,
+          isUpgrade: true,
+          description: this.getSkillDescription(skill.id, nextLevel),
+        });
+      }
+    }
+
+    // 随机抽 3 个
+    this.shuffleArray(pool);
+    return pool.slice(0, 3);
+  }
+
+  private getSkillDescription(skillId: SkillId, level: number): string {
+    const cfg = SKILL_CONFIGS[skillId][level - 1];
+    const parts: string[] = [];
+    parts.push(`CD ${cfg.cooldown}s，伤害 ${cfg.damage}`);
+    if (cfg.range > 0) parts.push(`范围 ${cfg.range}`);
+    if (cfg.repairAmount > 0 && cfg.repairType.length > 0) {
+      parts.push(`回复${cfg.repairType.join('/')} ${cfg.repairAmount} 点`);
+    }
+    if (cfg.bonusDamageVs) {
+      const names: Record<string, string> = { acid_rain: '酸雨怪', termite: '白蚁怪' };
+      parts.push(`对${names[cfg.bonusDamageVs] ?? cfg.bonusDamageVs}伤害 ×${cfg.bonusDamageMultiplier}`);
+    }
+    if (cfg.knockbackForce) parts.push('击退敌人');
+    if (cfg.widthMultiplier) parts.push('加宽冲击波');
+    if (cfg.projectileBounce) parts.push('弹射 1 次');
+    if (cfg.zoneDuration) parts.push(`持续 ${cfg.zoneDuration}s`);
+    return parts.join('，');
+  }
+
+  private shuffleArray<T>(arr: T[]): void {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+
+  // ── 玩家碰撞 ──
   private checkPlayerMonsterCollision(): void {
     for (const m of this.monsters) {
       if (m.isDead) continue;
-      const dist = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y, m.x, m.y,
-      );
-      const contactDist = PLAYER_CONFIG.radius + m.sprite.radius;
-      if (dist < contactDist) {
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, m.x, m.y);
+      if (dist < PLAYER_CONFIG.radius + m.sprite.radius) {
         m.onPlayerContact?.(m);
         this.player.takeDamage(m.damage);
       }
     }
   }
 
-  // ── 冻融怪减速光环 ──
   private checkFreezeAura(): void {
-    let nearFreeze = false;
+    let near = false;
     for (const m of this.monsters) {
       if (m.isDead || m.type !== 'freeze_thaw') continue;
-      const dist = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y, m.x, m.y,
-      );
-      if (dist < 120) {
-        nearFreeze = true;
-        break;
+      if (Phaser.Math.Distance.Between(this.player.x, this.player.y, m.x, m.y) < 120) {
+        near = true; break;
       }
     }
-    this.player.setSlow(nearFreeze, 0.4);
+    this.player.setSlow(near, 0.4);
   }
 
   // ── 自动普攻 ──
   private updateAutoAttack(delta: number): void {
     const dt = delta / 1000;
-
-    // 冷却计时
     this.autoAttackTimer += dt;
     if (this.autoAttackTimer >= this.autoAttackCooldown) {
       this.autoAttackTimer -= this.autoAttackCooldown;
       this.fireAutoBolt();
     }
 
-    // 更新飞行中的普攻弹
     for (const bolt of this.autoBolts) {
       bolt.lifetime -= dt;
       if (bolt.lifetime <= 0 || bolt.target.isDead) {
-        bolt.graphic.destroy();
-        continue;
+        bolt.graphic.destroy(); continue;
       }
-
-      // 追踪目标
-      const angle = Math.atan2(
-        bolt.target.y - bolt.graphic.y,
-        bolt.target.x - bolt.graphic.x,
-      );
-      bolt.graphic.x += Math.cos(angle) * bolt.speed * dt;
-      bolt.graphic.y += Math.sin(angle) * bolt.speed * dt;
-
-      // 命中检测
-      const dist = Phaser.Math.Distance.Between(
-        bolt.graphic.x, bolt.graphic.y,
-        bolt.target.x, bolt.target.y,
-      );
-      if (dist < 12) {
+      const a = Math.atan2(bolt.target.y - bolt.graphic.y, bolt.target.x - bolt.graphic.x);
+      bolt.graphic.x += Math.cos(a) * bolt.speed * dt;
+      bolt.graphic.y += Math.sin(a) * bolt.speed * dt;
+      if (Phaser.Math.Distance.Between(bolt.graphic.x, bolt.graphic.y, bolt.target.x, bolt.target.y) < 12) {
         bolt.target.takeDamage(bolt.damage);
         bolt.graphic.destroy();
       }
     }
-
     this.autoBolts = this.autoBolts.filter(b => b.lifetime > 0 && b.graphic.active);
   }
 
   private fireAutoBolt(): void {
-    // 找最近怪物
-    let nearest: Monster | null = null;
-    let nearestDist = Infinity;
+    let nearest: Monster | null = null, nearestDist = Infinity;
     for (const m of this.monsters) {
       if (m.isDead) continue;
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, m.x, m.y);
-      if (d < nearestDist) {
-        nearestDist = d;
-        nearest = m;
-      }
+      if (d < nearestDist) { nearestDist = d; nearest = m; }
     }
     if (!nearest) return;
-
     const bolt = this.add.circle(this.player.x, this.player.y, 3, 0x88ccff);
     bolt.setDepth(12);
-
-    this.autoBolts.push({
-      graphic: bolt,
-      target: nearest,
-      speed: 350,
-      damage: this.autoAttackDamage,
-      lifetime: 2,
-    });
+    this.autoBolts.push({ graphic: bolt, target: nearest, speed: 350, damage: this.autoAttackDamage, lifetime: 2 });
   }
 
-  // ── 水洼系统 ──
+  // ── 水洼 ──
   addPuddle(x: number, y: number): void {
-    const radius = 40;
     const g = this.add.graphics();
     g.fillStyle(0x44CC44, 0.25);
-    g.fillCircle(x, y, radius);
+    g.fillCircle(x, y, 40);
     g.setDepth(1);
-
-    this.puddles.push({ x, y, radius, remaining: 5, graphic: g });
+    this.puddles.push({ x, y, radius: 40, remaining: 5, graphic: g });
   }
 
   private updatePuddles(delta: number): void {
-    let playerOnPuddle = false;
-
+    let onPuddle = false;
     for (const p of this.puddles) {
       p.remaining -= delta / 1000;
-      if (p.remaining <= 0) {
-        p.graphic.destroy();
-        continue;
-      }
-
-      // 检测玩家是否站在水洼中
-      const dist = Phaser.Math.Distance.Between(
-        this.player.x, this.player.y, p.x, p.y,
-      );
-      if (dist < p.radius) {
-        playerOnPuddle = true;
-      }
+      if (p.remaining <= 0) { p.graphic.destroy(); continue; }
+      if (Phaser.Math.Distance.Between(this.player.x, this.player.y, p.x, p.y) < p.radius) onPuddle = true;
     }
-
     this.puddles = this.puddles.filter(p => p.remaining > 0);
-
-    // 水洼减速独立于冻融
-    if (playerOnPuddle) {
-      this.player.setSlow(true, 0.6);
-    } else {
-      // 如果没有冻融减速，恢复（冻融在 checkFreezeAura 中设置）
-    }
+    if (onPuddle) this.player.setSlow(true, 0.6);
   }
 
   // ── 胜负 ──
   private endGame(victory: boolean): void {
     if (this.isGameOver) return;
     this.isGameOver = true;
-
     const elapsed = GAME_DURATION - this.gameTime;
-    const mins = Math.floor(elapsed / 60);
-    const secs = Math.floor(elapsed % 60);
-
-    const msg = victory ? '古建守卫成功！' : '古建被毁...';
-    const color = victory ? '#ffdd44' : '#ff4444';
-    const subtitle = `坚持时间 ${mins}:${secs.toString().padStart(2, '0')}  |  击杀 ${this.killCount}`;
-
-    this.add.rectangle(
-      GAME_WIDTH / 2, GAME_HEIGHT / 2,
-      GAME_WIDTH, GAME_HEIGHT,
-      0x000000, 0.5,
-    ).setScrollFactor(0).setDepth(199);
-
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, msg, {
-      fontSize: '42px', color, fontFamily: 'sans-serif',
-      stroke: '#000', strokeThickness: 4,
+    const m = Math.floor(elapsed / 60), s = Math.floor(elapsed % 60);
+    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.5)
+      .setScrollFactor(0).setDepth(199);
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, victory ? '古建守卫成功！' : '古建被毁...', {
+      fontSize: '42px', color: victory ? '#ffdd44' : '#ff4444',
+      fontFamily: 'sans-serif', stroke: '#000', strokeThickness: 4,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(200);
-
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20, subtitle, {
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20,
+      `坚持时间 ${m}:${s.toString().padStart(2, '0')}  |  击杀 ${this.killCount}`, {
       fontSize: '16px', color: '#ccc',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(200);
-
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 60, '刷新页面重开一局', {
       fontSize: '13px', color: '#888',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(200);
   }
 
-  // ── 调试键 ──
+  // ── 调试 ──
   private setupDebugControls(): void {
     const kb = this.input.keyboard!;
-
-    // 空格：秒杀所有怪物
-    kb.on('keydown-SPACE', () => {
-      for (const m of this.monsters) m.takeDamage(999);
-    });
-
-    // K / H：扣/回木质结构
+    kb.on('keydown-SPACE', () => { for (const m of this.monsters) m.takeDamage(999); });
     kb.on('keydown-K', () => this.building.damageStructure('wood', 10));
     kb.on('keydown-H', () => this.building.healStructure('wood', 10));
-
-    // 1-4：摧毁指定结构
     kb.on('keydown-ONE', () => this.building.damageStructure('wood', 200));
     kb.on('keydown-TWO', () => this.building.damageStructure('stone', 200));
     kb.on('keydown-THREE', () => this.building.damageStructure('tile', 200));
     kb.on('keydown-FOUR', () => this.building.damageStructure('painting', 200));
-
-    // Q：强制升级（给经验）
-    kb.on('keydown-Q', () => {
-      this.player.exp += this.player.expToNext;
-    });
-
-    // Z/X/C/V/B：直接添加 5 个技能
+    kb.on('keydown-Q', () => { this.player.exp += this.player.expToNext; });
     const skillIds: SkillId[] = ['wood_reinforce', 'stone_repair', 'waterproof', 'insect_control', 'painting_restore'];
-    const keys = ['Z', 'X', 'C', 'V', 'B'];
-    keys.forEach((key, i) => {
+    ['Z', 'X', 'C', 'V', 'B'].forEach((key, i) => {
       kb.on(`keydown-${key}`, () => {
         this.skillManager.addSkill(skillIds[i]);
-        // 直接升满 3 级
         this.skillManager.upgradeSkill(skillIds[i]);
         this.skillManager.upgradeSkill(skillIds[i]);
       });

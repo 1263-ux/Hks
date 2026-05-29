@@ -171,6 +171,20 @@ export const SKILL_CONFIGS: Record<SkillId, SkillLevelConfig[]> = {
   ],
 };
 
+// ---- 经验球 ----
+export const EXP_ORB_CONFIG = {
+  radius: 6,
+  color: 0x44ff88,
+  lifetime: 30,      // 地面存活秒数
+  attractSpeed: 400, // 吸附飞行速度 px/s
+  collectDist: 12,   // 收集判定距离
+};
+
+// ---- 全部技能 ID 列表（用于技能池生成） ----
+export const ALL_SKILL_IDS: SkillId[] = [
+  'wood_reinforce', 'stone_repair', 'waterproof', 'insect_control', 'painting_restore',
+];
+
 // ---- 刷怪权重（Phase 2 简单权重，后续改为波次驱动） ----
 export const SPAWN_WEIGHTS: { type: MonsterType; weight: number }[] = [
   { type: 'termite', weight: 40 },

@@ -77,6 +77,7 @@ export class Building {
     if (s.currentHp > oldHp) {
       SoundManager.buildingHeal();
       this.flashHeal();
+      this.updateAppearance();
     }
   }
 
@@ -92,11 +93,29 @@ export class Building {
     }
   }
 
+  /** 根据最低血条百分比切换外观 */
+  updateAppearance(): void {
+    let minRatio = 1;
+    for (const s of this.structures.values()) {
+      minRatio = Math.min(minRatio, s.currentHp / s.maxHp);
+    }
+    let key = 'building_100';
+    if (minRatio <= 0) key = 'building_0';
+    else if (minRatio <= 0.25) key = 'building_25';
+    else if (minRatio <= 0.5) key = 'building_50';
+    else if (minRatio <= 0.75) key = 'building_75';
+
+    if (this.scene.textures.exists(key)) {
+      this.graphics.setTexture(key);
+    }
+  }
+
   private flashDamage(): void {
     this.graphics.setAlpha(0.4);
     this.scene.time.delayedCall(120, () => {
       if (this.graphics.active) this.graphics.setAlpha(1);
     });
+    this.updateAppearance();
   }
 
   private flashHeal(): void {

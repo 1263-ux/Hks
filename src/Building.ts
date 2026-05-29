@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { StructureType } from './config';
 import { SoundManager } from './SoundManager';
+import { VFX } from './VFX';
 
 interface StructureState {
   currentHp: number;
@@ -60,8 +61,8 @@ export class Building {
     if (!s) return;
     s.currentHp = Math.max(0, s.currentHp - amount);
     SoundManager.buildingHit();
+    VFX.buildingHit(this.scene, this.x, this.y, type);
     this.flashDamage();
-    this.scene.cameras.main.shake(80, 0.004);
 
     if (s.currentHp <= 0 && this.onFailure) {
       this.onFailure();
@@ -76,6 +77,7 @@ export class Building {
     s.currentHp = Math.min(s.maxHp, s.currentHp + amount);
     if (s.currentHp > oldHp) {
       SoundManager.buildingHeal();
+      VFX.buildingHeal(this.scene, this.x, this.y);
       this.flashHeal();
       this.updateAppearance();
     }

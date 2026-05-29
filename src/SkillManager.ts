@@ -7,6 +7,7 @@ import { Player } from './Player';
 import { Monster } from './Monster';
 import { Building } from './Building';
 import { SoundManager } from './SoundManager';
+import { VFX } from './VFX';
 
 // ── 投射物 ──
 interface Projectile {
@@ -136,22 +137,27 @@ export class SkillManager {
     switch (skill.id) {
       case 'wood_reinforce':
         SoundManager.skillWood();
+        VFX.skillWood(this.scene, player.x, player.y, 0);
         this.castWoodReinforce(skill, player, monsters);
         break;
       case 'stone_repair':
         SoundManager.skillStone();
+        VFX.skillStone(this.scene, player.x, player.y, skill.range);
         this.castStoneRepair(skill, player, monsters);
         break;
       case 'waterproof':
         SoundManager.skillWater();
+        VFX.skillWater(this.scene, player.x, player.y, skill.range);
         this.castWaterproof(skill, player, monsters);
         break;
       case 'insect_control':
         SoundManager.skillInsect();
+        VFX.skillInsect(this.scene, player.x, player.y, skill.range);
         this.castInsectControl(skill, player);
         break;
       case 'painting_restore':
         SoundManager.skillPaint();
+        VFX.skillPaint(this.scene, player.x, player.y);
         this.castPaintingRestore(skill, player, monsters);
         break;
     }

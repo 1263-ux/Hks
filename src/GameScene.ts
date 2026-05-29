@@ -14,6 +14,7 @@ import { Monster } from './Monster';
 import { HUD } from './HUD';
 import { SkillManager } from './SkillManager';
 import { SoundManager } from './SoundManager';
+import { VFX } from './VFX';
 import { generateAllTextures } from './ArtGen';
 
 // ── 水洼 ──
@@ -299,6 +300,7 @@ export class GameScene extends Phaser.Scene {
     if (this.levelUpPanelActive) return;
     if (this.player.exp >= this.player.expToNext) {
       SoundManager.levelUp();
+      VFX.levelUp(this, this.player.x, this.player.y);
       this.player.exp -= this.player.expToNext;
       this.player.level++;
       this.player.expToNext = BASE_EXP_TO_LEVEL + this.player.level * EXP_PER_LEVEL;
@@ -436,6 +438,7 @@ export class GameScene extends Phaser.Scene {
       bolt.graphic.y += Math.sin(a) * bolt.speed * dt;
       if (Phaser.Math.Distance.Between(bolt.graphic.x, bolt.graphic.y, bolt.target.x, bolt.target.y) < 12) {
         bolt.target.takeDamage(bolt.damage);
+        VFX.boltHit(this, bolt.graphic.x, bolt.graphic.y);
         bolt.graphic.destroy();
       }
     }

@@ -260,36 +260,25 @@ export const STRUCT_BAR = { w: 160, h: 14, gap: 10 } as const;
 export const LEVELUP_CARD = { w: 230, h: 250 } as const;
 
 // ============================================================
-// 战斗手感 — 创伤值屏幕震动系统
+// 战斗手感 — 命中点光晕（替代全屏闪白）
 // ============================================================
 
-export const TRAUMA_CONFIG = {
-  decayPerSecond: 0.6,
-  exponent: 2.0,
-  maxOffset: 12,
-  maxRotation: 3,
-  horizontalDamping: 0.6, // 水平震动系数（小于 1 减少眩晕）
-
-  events: {
-    light:     0.15,
-    medium:    0.25,
-    heavy:     0.40,
-    ultra:     0.60,
-    building:  0.35,
-  },
+export const IMPACT_FLASH_CONFIG = {
+  light:   { coreColor: 0xffffff, coreRadius: 6,  coreDuration: 100, ringColor: 0xcccccc, ringRadius: 30,  ringDuration: 200 },
+  medium:  { coreColor: 0xffffff, coreRadius: 8,  coreDuration: 130, ringColor: 0xffdd88, ringRadius: 45,  ringDuration: 250 },
+  heavy:   { coreColor: 0xffdd44, coreRadius: 12, coreDuration: 160, ringColor: 0xffaa44, ringRadius: 60,  ringDuration: 300 },
+  ultra:   { coreColor: 0xffdd44, coreRadius: 16, coreDuration: 200, ringColor: 0xff6600, ringRadius: 80,  ringDuration: 400 },
 } as const;
-
-export type TraumaTier = keyof typeof TRAUMA_CONFIG.events;
 
 // ============================================================
 // 战斗手感 — 命中停顿（Hit Stop）
 // ============================================================
 
 export const HIT_STOP_CONFIG = {
-  light:   { freezeMs: 33,  shake: 'light'   as TraumaTier, flash: false },
-  medium:  { freezeMs: 66,  shake: 'medium'  as TraumaTier, flash: false },
-  heavy:   { freezeMs: 100, shake: 'heavy'   as TraumaTier, flash: true  },
-  ultra:   { freezeMs: 150, shake: 'ultra'   as TraumaTier, flash: true  },
+  light:   { freezeMs: 33  },
+  medium:  { freezeMs: 66  },
+  heavy:   { freezeMs: 100 },
+  ultra:   { freezeMs: 150 },
 
   cooldownMs: 150,
 } as const;
